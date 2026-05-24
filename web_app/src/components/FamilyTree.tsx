@@ -1,26 +1,20 @@
 'use client';
 
+/**
+ * Family lookup — ported from the SmartNigranVoter Streamlit dashboard
+ * (dashboard/pages/3_Family_Lookup.py). Renders a Graphviz-style top-down
+ * tree per inferred family with sentiment-coloured nodes and a household
+ * influence verdict banner.
+ */
+
 import { useState } from 'react';
 import type { FamilyGroup, VoterRow } from '@/lib/types';
 import { TagModal } from './VoterTag';
 
-/** Pick the head: a member whose father/husband name does NOT appear as a name in the family. */
-function chooseHead(members: VoterRow[]): VoterRow {
-  const names = new Set(members.map((m) => normalize(m.name)));
-  const head = members.find((m) => !names.has(normalize(m.father_husband_name)));
-  return head ?? members[0];
-}
+// ── Helpers ───────────────────────────────────────────────────────────
 
 function normalize(s: string): string {
   return (s || '').trim().toLowerCase();
-}
-
-/** Build parent->children adjacency by matching father_husband_name → name within the family. */
-interface TreeNode {
-  voter: VoterRow;
-  spouse?: VoterRow;
-  children: TreeNode[];
-  generation: number;
 }
 
 function isFemale(v: VoterRow): boolean {
@@ -28,127 +22,101 @@ function isFemale(v: VoterRow): boolean {
   return g.startsWith('f') || g.includes('female') || g.includes('عورت');
 }
 
-function isMale(v: VoterRow): boolean {
-  const g = (v.gender || '').toLowerCase();
-  return g.startsWith('m') || g.includes('male') || g.includes('مرد');
+/** Pick the head: a member whose father/husband name is NOT another member's name. */
+function chooseHead(members: VoterRow[]): VoterRow {
+  const names = new Set(members.map((m) => normalize(m.name)));
+  return members.find((m) => !names.has(normalize(m.father_husband_name))) ?? members[0];
 }
 
-/**
- * Spouse heuristic for AJK electoral rolls (relaxed):
- *   A married woman's `father_husband_name` is the husband's name. So a female
- *   F whose `father_husband_name == M.name` could be either his wife or daughter.
- *   We call her the wife when:
- *     - F is female AND M is male (or unknown gender)
- *     - F.age >= 20 OR F.age is unknown — young married women in AJK rolls are common
- *     - The pair's age gap is <= 35 years
- *   The closest-age female wins; remaining same-named females stay as daughters.
- */
-function findSpouse(
-  head: VoterRow,
-  candidates: VoterRow[],
-  used: Set<string>
-): VoterRow | undefined {
-  if (isFemale(head)) return undefined; // limit to male-head detection for now
+/** Match the reference's spouse heuristic (relaxed for AJK rolls). */
+function findSpouse(head: VoterRow, candidates: VoterRow[], used: Set<string>): VoterRow | undefined {
+  if (isFemale(head)) return undefined;
   const headName = normalize(head.name);
   if (!headName) return undefined;
-  const headAge = head.age ?? null;
 
   let best: VoterRow | undefined;
   let bestGap = Number.POSITIVE_INFINITY;
-
   for (const c of candidates) {
-    if (used.has(c.id)) continue;
-    if (c.id === head.id) continue;
+    if (used.has(c.id) || c.id === head.id) continue;
     if (!isFemale(c)) continue;
     if (normalize(c.father_husband_name) !== headName) continue;
-    if (c.age != null && c.age < 20) continue; // under-20 still very likely a daughter
-
-    const gap = headAge != null && c.age != null ? Math.abs(headAge - c.age) : 15;
+    if (c.age != null && c.age < 20) continue;
+    const gap = head.age != null && c.age != null ? Math.abs(head.age - c.age) : 15;
     if (gap > 35) continue;
-    if (gap < bestGap) {
-      bestGap = gap;
-      best = c;
-    }
+    if (gap < bestGap) { bestGap = gap; best = c; }
   }
   return best;
 }
 
-/** Deepest generation reached by any node in the tree (0 = head row only). */
-function maxDepth(roots: TreeNode[]): number {
-  let max = 0;
-  const walk = (n: TreeNode) => {
-    if (n.generation > max) max = n.generation;
-    n.children.forEach(walk);
-  };
-  roots.forEach(walk);
-  return max;
-}
+type Relation = 'self' | 'spouse' | 'child' | 'grandchild' | 'member';
 
-const LANE_LABELS = [
-  'Head & Spouse',
-  'Children',
-  'Grandchildren',
-  'Great-grandchildren',
-  'Further generations'
-];
+interface TreeNode {
+  voter: VoterRow;
+  spouse?: VoterRow;
+  relation: Relation;
+  children: TreeNode[];
+}
 
 function buildTree(members: VoterRow[]): TreeNode[] {
   const used = new Set<string>();
-  const buildNode = (voter: VoterRow, generation: number): TreeNode => {
+  const head = chooseHead(members);
+
+  const buildNode = (voter: VoterRow, relation: Relation): TreeNode => {
     used.add(voter.id);
-    const spouse = findSpouse(voter, members, used);
+    const spouse = relation === 'self' || relation === 'child'
+      ? findSpouse(voter, members, used)
+      : undefined;
     if (spouse) used.add(spouse.id);
 
+    const childRelation: Relation = relation === 'self' ? 'child' : 'grandchild';
     const children: TreeNode[] = [];
-    for (const candidate of members) {
-      if (used.has(candidate.id)) continue;
-      if (normalize(candidate.father_husband_name) === normalize(voter.name)) {
-        children.push(buildNode(candidate, generation + 1));
+    for (const cand of members) {
+      if (used.has(cand.id)) continue;
+      if (normalize(cand.father_husband_name) === normalize(voter.name)) {
+        children.push(buildNode(cand, childRelation));
       }
     }
-    // Eldest first
     children.sort((a, b) => (b.voter.age ?? 0) - (a.voter.age ?? 0));
-    return { voter, spouse, children, generation };
+    return { voter, spouse, relation, children };
   };
 
-  const head = chooseHead(members);
-  const roots: TreeNode[] = [buildNode(head, 0)];
-
-  // Any orphan (member we never visited — name doesn't link to head) is appended as a sibling root.
+  const roots: TreeNode[] = [buildNode(head, 'self')];
   for (const m of members) {
-    if (!used.has(m.id)) {
-      roots.push(buildNode(m, 0));
-    }
+    if (!used.has(m.id)) roots.push(buildNode(m, 'member'));
   }
   return roots;
 }
 
-/** Sentiment palette matching SmartNigranVoter family graph (pastel fill + dark stroke). */
-function nodePalette(status: string): { bg: string; border: string; text: string; pill: string } {
+// ── Sentiment palette (mirrors SmartNigranVoter SENTIMENT_BADGE + _DOT_FILL) ─
+
+interface Palette { bg: string; border: string; text: string; label: string; icon: string }
+
+function palette(status: string): Palette {
   switch (status) {
     case 'Supporter':
-      return { bg: '#DCFCE7', border: '#16A34A', text: '#14532D', pill: 'bg-emerald-600 text-white' };
+      return { bg: '#C8E6C9', border: '#2E7D32', text: '#14532D', label: 'Supporter',  icon: '🟢' };
     case 'Non-Supporter':
-      return { bg: '#FEE2E2', border: '#DC2626', text: '#7F1D1D', pill: 'bg-rose-600 text-white' };
+      return { bg: '#FFCDD2', border: '#C62828', text: '#7F1D1D', label: 'Opposition', icon: '🔴' };
     case 'Undecided':
-      return { bg: '#F1F5F9', border: '#64748B', text: '#0F172A', pill: 'bg-slate-500 text-white' };
+      return { bg: '#EEEEEE', border: '#757575', text: '#0F172A', label: 'Undecided',  icon: '⚪' };
     default:
-      return { bg: '#FAFAFA', border: '#CBD5E1', text: '#475569', pill: 'bg-slate-200 text-slate-700' };
+      return { bg: '#F5F5F5', border: '#9E9E9E', text: '#475569', label: 'Unsurveyed', icon: '⚫' };
   }
 }
 
+const RELATION_EMOJI: Record<Relation, string> = {
+  self: '⭐', spouse: '💍', child: '🧒', grandchild: '👶', member: '•',
+};
+const RELATION_LABEL: Record<Relation, string> = {
+  self: 'Head', spouse: 'Spouse', child: 'Child', grandchild: 'Grandchild', member: 'Member',
+};
+
+// ── Node card ──────────────────────────────────────────────────────────
+
 function TreeCard({
-  voter,
-  relation,
-  isEgo,
-  onSelect
-}: Readonly<{
-  voter: VoterRow;
-  relation: string;
-  isEgo?: boolean;
-  onSelect: (v: VoterRow) => void;
-}>) {
-  const p = nodePalette(voter.voter_status);
+  voter, relation, isEgo, onSelect,
+}: Readonly<{ voter: VoterRow; relation: Relation; isEgo?: boolean; onSelect: (v: VoterRow) => void }>) {
+  const p = palette(voter.voter_status);
   return (
     <button
       type="button"
@@ -158,64 +126,37 @@ function TreeCard({
         background: p.bg,
         borderColor: p.border,
         color: p.text,
-        boxShadow: isEgo ? `0 0 0 3px ${p.border}` : undefined
+        borderWidth: isEgo ? 3 : 1.5,
       }}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="fam-relation">{relation}</span>
-        {voter.is_on_duty ? <span className="fam-duty">🎖️ Duty</span> : null}
+      <div className="fam-node-head">
+        <span className="fam-relation">{RELATION_EMOJI[relation]} {RELATION_LABEL[relation]}</span>
+        {voter.is_on_duty ? <span className="fam-duty">🎖️</span> : null}
       </div>
-      <div className="urdu rtl fam-name" dir="rtl">{voter.name}</div>
+      <div className="urdu rtl fam-name" dir="rtl">{voter.name || '(no name)'}</div>
       <div className="fam-meta">
-        <span>{voter.cnic || 'No CNIC'}</span>
-        {voter.age ? <span>· {voter.age}y</span> : null}
-        {voter.gender ? <span>· {voter.gender}</span> : null}
+        <span>CNIC: {voter.cnic || '—'}</span>
+        {voter.age ? <span> · {voter.age}y</span> : null}
+        {voter.gender ? <span> · {voter.gender}</span> : null}
       </div>
-      <div className="urdu rtl fam-father" dir="rtl">والد/شوہر: {voter.father_husband_name || '—'}</div>
-      <span className={`fam-pill ${p.pill}`}>{voter.voter_status}</span>
+      <div className="fam-sentiment" style={{ color: p.border }}>
+        {p.icon} {p.label}
+      </div>
     </button>
   );
 }
 
-function relationLabel(generation: number, isEgo: boolean): string {
-  if (isEgo) return '⭐ Head';
-  switch (generation) {
-    case 1: return '🧒 Child';
-    case 2: return '👶 Grandchild';
-    case 3: return '👼 Great-grandchild';
-    default: return '• Member';
-  }
-}
-
-function Subtree({
-  node,
-  isEgo,
-  onSelect
-}: Readonly<{ node: TreeNode; isEgo?: boolean; onSelect: (v: VoterRow) => void }>) {
+function Subtree({ node, isEgo, onSelect }: Readonly<{ node: TreeNode; isEgo?: boolean; onSelect: (v: VoterRow) => void }>) {
   return (
     <li>
       {node.spouse ? (
         <div className="fam-couple">
-          <TreeCard
-            voter={node.voter}
-            relation={relationLabel(node.generation, !!isEgo)}
-            isEgo={isEgo}
-            onSelect={onSelect}
-          />
+          <TreeCard voter={node.voter} relation={node.relation} isEgo={isEgo} onSelect={onSelect} />
           <span className="fam-couple-link" aria-hidden="true">♥</span>
-          <TreeCard
-            voter={node.spouse}
-            relation="💍 Spouse"
-            onSelect={onSelect}
-          />
+          <TreeCard voter={node.spouse} relation="spouse" onSelect={onSelect} />
         </div>
       ) : (
-        <TreeCard
-          voter={node.voter}
-          relation={relationLabel(node.generation, !!isEgo)}
-          isEgo={isEgo}
-          onSelect={onSelect}
-        />
+        <TreeCard voter={node.voter} relation={node.relation} isEgo={isEgo} onSelect={onSelect} />
       )}
       {node.children.length > 0 ? (
         <ul>
@@ -228,6 +169,35 @@ function Subtree({
   );
 }
 
+// ── Household influence verdict (mirrors compute_family_influence) ─────
+
+interface Influence { total: number; supporter: number; opposition: number; undecided: number; unsurveyed: number; score: number; verdict: string; color: string }
+
+function computeInfluence(members: VoterRow[]): Influence {
+  const counts = { supporter: 0, opposition: 0, undecided: 0, unsurveyed: 0 };
+  for (const m of members) {
+    switch (m.voter_status) {
+      case 'Supporter':     counts.supporter++;  break;
+      case 'Non-Supporter': counts.opposition++; break;
+      case 'Undecided':     counts.undecided++;  break;
+      default:              counts.unsurveyed++; break;
+    }
+  }
+  const total = members.length || 1;
+  const raw = (counts.supporter - counts.opposition) / total;
+  const score = Math.round(50 + raw * 50);
+  let verdict = 'Mixed / persuadable';
+  let color = '#FBC02D';
+  if (score >= 65)      { verdict = 'FRIENDLY HOUSEHOLD'; color = '#2E7D32'; }
+  else if (score >= 55) { verdict = 'Leans our way';      color = '#9CCC65'; }
+  else if (score >= 45) { verdict = 'Mixed / persuadable';color = '#FBC02D'; }
+  else if (score >= 35) { verdict = 'Leans opposition';   color = '#FB8C00'; }
+  else                  { verdict = 'HOSTILE HOUSEHOLD';  color = '#E53935'; }
+  return { total: members.length, ...counts, score, verdict, color };
+}
+
+// ── Top-level component ────────────────────────────────────────────────
+
 export function FamilyTree({ families }: Readonly<{ families: FamilyGroup[] }>) {
   const [selected, setSelected] = useState<VoterRow | null>(null);
 
@@ -239,26 +209,29 @@ export function FamilyTree({ families }: Readonly<{ families: FamilyGroup[] }>) 
     <div className="grid gap-4 xl:grid-cols-2">
       {families.map((family) => {
         const roots = buildTree(family.members);
+        const inf = computeInfluence(family.members);
         return (
           <div key={family.inferred_family_id} className="panel p-4">
             <header className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
-              <div>
-                <p className="snvb-label-upper">{family.block_code}</p>
-                <h3 className="urdu rtl mt-1 text-lg font-black text-slate-900" dir="rtl">
+              <div className="min-w-0">
+                <p className="snvb-label-upper">🌳 {family.block_code}</p>
+                <h3 className="urdu rtl mt-1 truncate text-lg font-black text-slate-900" dir="rtl">
                   {family.address}
                 </h3>
               </div>
-              <span className="snvb-badge bg-navy text-white">
+              <span className="snvb-badge bg-navy text-white shrink-0">
                 {family.members.length} voters
               </span>
             </header>
 
+            <div className="fam-influence" style={{ background: inf.color }} title={`Influence score ${inf.score}/100`}>
+              <span className="fam-influence-verdict">{inf.verdict}</span>
+              <span className="fam-influence-meta">
+                🟢 {inf.supporter} · ⚪ {inf.undecided} · 🔴 {inf.opposition} · ⚫ {inf.unsurveyed}
+              </span>
+            </div>
+
             <div className="fam-tree-scroll">
-              <div className="fam-lanes" aria-hidden="true">
-                {LANE_LABELS.slice(0, maxDepth(roots) + 1).map((label) => (
-                  <div key={label} className="fam-lane">{label}</div>
-                ))}
-              </div>
               <ul className="fam-tree">
                 {roots.map((root, idx) => (
                   <Subtree key={root.voter.id} node={root} isEgo={idx === 0} onSelect={setSelected} />
