@@ -3,11 +3,22 @@
 @tailwind utilities;
 
 /* ── Urdu Nastaliq typography ─────────────────────────────────────────── */
+/*
+ * Jameel Noori Nastaleeq — the gold-standard Urdu nastaliq face. Self-hosted
+ * as a subset woff2 under /public/fonts so it works on Vercel without any
+ * external font-CDN dependency. Falls back to Noto Nastaliq Urdu (Google
+ * Fonts) and then to system Arabic-script faces.
+ */
 @font-face {
   font-family: 'Jameel Noori Nastaleeq';
   src: local('Jameel Noori Nastaleeq'),
-       url('/fonts/JameelNooriNastaleeq.ttf') format('truetype');
+       url('/fonts/JameelNooriNastaleeq.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
   font-display: swap;
+  unicode-range: U+0020-007F, U+00A0-00FF, U+0600-06FF, U+0750-077F,
+                 U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF,
+                 U+200C-200F, U+FB50-FDFF, U+FE70-FEFF;
 }
 
 @font-face {
