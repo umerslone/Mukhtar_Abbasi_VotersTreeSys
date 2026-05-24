@@ -1,0 +1,30 @@
+# ── Voter OCR Microservice — pinned deps ─────────────────────────────
+# Python 3.10 / 3.11 recommended (PaddleOCR wheels available).
+
+# Web framework
+Flask==3.0.3
+Flask-Cors==4.0.1
+gunicorn==22.0.0          # production WSGI (Linux/macOS)
+waitress==3.0.0           # production WSGI (Windows fallback)
+
+# OCR + table structure
+paddleocr==2.7.3
+paddlepaddle==2.6.1       # CPU build; for GPU swap to paddlepaddle-gpu
+shapely==2.0.4            # required by paddleocr layout
+pyclipper==1.3.0.post5
+
+# Image / PDF
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+Pillow==10.4.0
+pdf2image==1.17.0         # needs Poppler installed on host
+
+# Data
+pandas==2.2.2
+
+# Search / fuzzy
+rapidfuzz==3.9.7
+
+# Utilities
+python-dotenv==1.0.1
+werkzeug==3.0.4
