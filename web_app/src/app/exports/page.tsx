@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { ExportsPanel } from '@/components/ExportsPanel';
 import type { VoterRow } from '@/lib/types';
 
+export const dynamic = 'force-dynamic';
+
 export default async function ExportsPage() {
   const session = await getServerSession(authOptions);
   if (!session) {

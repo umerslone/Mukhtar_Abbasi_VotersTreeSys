@@ -6,6 +6,8 @@ import type { FamilyGroup, VoterRow } from '@/lib/types';
 import { DashboardFilters } from '@/components/DashboardFilters';
 import { FamilyTree } from '@/components/FamilyTree';
 
+export const dynamic = 'force-dynamic';
+
 interface SearchParams {
   q?: string;
   status?: string;

@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { DutyStaffUploader } from '@/components/DutyStaffUploader';
 
+export const dynamic = 'force-dynamic';
+
 export default async function DutyStaffPage() {
   const session = await getServerSession(authOptions);
   if (!session) {
