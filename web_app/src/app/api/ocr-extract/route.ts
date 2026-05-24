@@ -1,44 +1,32 @@
 /**
- * Proxy route — forwards multipart uploads to the Python Voter OCR
- * microservice (PaddleOCR + PPStructure) and optionally chains the
- * structured JSON it returns into the existing /api/ingest pipeline so
- * voters land in Postgres in one click.
+ * POST /api/ocr-extract
  *
- * Activated only when OCR_SERVICE_URL is set in the environment. If
- * unset, this route returns 503 and the UI hides the PDF/image
- * uploader, leaving the long-standing JSON/CSV ingest flow untouched.
- *
- * Query params:
- *   ?ingest=1       → after OCR, immediately POST results to ingestVoters
- *   ?batch=<tag>    → batch tag used for ingest (optional)
+ * Direct Azure Document Intelligence call — no Python sidecar, runs on
+ * Vercel. Accepts a PDF or image, returns Prisma-shaped voter rows. With
+ * `?ingest=1` the result is chained straight into `ingestVoters()` so a
+ * single upload populates the database end-to-end.
  *
  * Auth: same NextAuth session check as /api/ingest.
  */
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+
 import { authOptions } from '@/lib/auth';
-import { ingestVoters, type IngestVoterRow } from '@/lib/ingest';
+import { ingestVoters } from '@/lib/ingest';
+import { extractVotersFromBytes } from '@/lib/ocr_extract';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Azure DI is async; allow up to 5 minutes for big PDFs (Pro / Fluid plans).
+export const maxDuration = 300;
 
-const MAX_BYTES = 100 * 1024 * 1024;
+// Vercel body cap: ~4.5 MB Hobby, 50 MB Pro Fluid. We honor 50 MB here.
+const MAX_BYTES = 50 * 1024 * 1024;
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const ocrUrl = process.env.OCR_SERVICE_URL;
-  if (!ocrUrl) {
-    return NextResponse.json(
-      {
-        error:
-          'OCR service is not configured. Set OCR_SERVICE_URL to the Python /voter_ocr_service host (e.g. http://localhost:5005).',
-      },
-      { status: 503 },
-    );
   }
 
   let form: FormData;
@@ -58,58 +46,54 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+  if (file.size === 0) {
+    return NextResponse.json({ error: 'Empty file' }, { status: 400 });
+  }
 
   const url = new URL(request.url);
   const wantIngest = url.searchParams.get('ingest') === '1';
   const batch = url.searchParams.get('batch')?.trim() || `ocr-${file.name}`;
 
-  // Forward verbatim to the Python service.
-  const forwarded = new FormData();
-  forwarded.append('file', file, file.name);
-
-  let ocrResponse: Response;
+  const started = Date.now();
+  let extract;
   try {
-    ocrResponse = await fetch(`${ocrUrl.replace(/\/$/, '')}/extract-voters`, {
-      method: 'POST',
-      body: forwarded,
-    });
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    extract = await extractVotersFromBytes(bytes, file.name);
   } catch (err) {
     return NextResponse.json(
-      { error: `OCR service unreachable: ${(err as Error).message}` },
+      { success: false, error: `OCR failed: ${(err as Error).message}` },
       { status: 502 },
     );
   }
+  const elapsedSeconds = Math.round((Date.now() - started) / 100) / 10;
 
-  const ocrJson = (await ocrResponse.json().catch(() => null)) as
-    | { success?: boolean; data?: IngestVoterRow[]; message?: string }
-    | null;
-
-  if (!ocrResponse.ok || !ocrJson?.success) {
-    return NextResponse.json(
-      { error: ocrJson?.message || `OCR failed (HTTP ${ocrResponse.status})` },
-      { status: ocrResponse.status || 502 },
-    );
-  }
+  const basePayload = {
+    success: true,
+    total_voters: extract.totalVoters,
+    polling_station: extract.pollingStation,
+    pages: extract.totalPages,
+    tables: extract.totalTables,
+    elapsed_seconds: elapsedSeconds,
+    data: extract.voters,
+  };
 
   if (!wantIngest) {
-    // Return the OCR payload as-is; the React side can preview before ingesting.
-    return NextResponse.json(ocrJson);
+    return NextResponse.json(basePayload);
   }
 
-  const rows = ocrJson.data ?? [];
-  if (rows.length === 0) {
+  if (extract.voters.length === 0) {
     return NextResponse.json(
-      { ...ocrJson, ingest: { error: 'OCR returned zero rows' } },
+      { ...basePayload, ingest: { error: 'OCR returned zero rows' } },
       { status: 200 },
     );
   }
 
   try {
-    const ingest = await ingestVoters(rows, batch);
-    return NextResponse.json({ ...ocrJson, ingest });
+    const ingest = await ingestVoters(extract.voters, batch);
+    return NextResponse.json({ ...basePayload, ingest });
   } catch (err) {
     return NextResponse.json(
-      { ...ocrJson, ingest: { error: (err as Error).message } },
+      { ...basePayload, ingest: { error: (err as Error).message } },
       { status: 200 },
     );
   }

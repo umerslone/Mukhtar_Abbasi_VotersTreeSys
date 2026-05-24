@@ -170,11 +170,11 @@ export default function IngestPage() {
         <div>
           <h2 className="text-lg font-bold text-slate-900">Or upload a scanned PDF / image</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Routed to the Urdu OCR microservice (PaddleOCR + PPStructure). Extracted voters are
-            ingested into the database in the same step — no local Python required.
+            Runs Azure Document Intelligence directly from this server, then ingests the
+            extracted voters into the database in one step — no local Python required.
           </p>
-          <p className="mt-1 text-xs text-amber-700">
-            Requires <code className="rounded bg-amber-100 px-1.5 py-0.5">OCR_SERVICE_URL</code> in <code className="rounded bg-amber-100 px-1.5 py-0.5">web_app/.env</code>.
+          <p className="mt-1 text-xs text-slate-500">
+            Requires <code className="rounded bg-slate-100 px-1.5 py-0.5">AZURE_DOCUMENT_INTELLIGENCE_*</code> env vars (already set if your existing Azure OCR pipeline works).
           </p>
         </div>
 
