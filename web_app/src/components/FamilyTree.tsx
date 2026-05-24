@@ -13,9 +13,67 @@ import { TagModal } from './VoterTag';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
+/** Lightweight normalize used for label comparison (kept for kinshipLabel). */
 function normalize(s: string): string {
-  return (s || '').trim().toLowerCase();
+  return normalizeName(s);
 }
+
+/**
+ * Urdu/Arabic-aware name normalizer — collapses common spelling variants
+ * (alef forms, ya/ta/ha variants, hamza, diacritics) and strips honorifics
+ * so that OCR-drifted names from the voter roll match each other.
+ */
+function normalizeName(s: string): string {
+  if (!s) return '';
+  let x = s.trim().toLowerCase();
+  // remove tatweel + Arabic diacritics (harakat)
+  x = x.replace(/[\u0640\u064B-\u0652\u0670\u06D6-\u06ED]/g, '');
+  // unify alef family → ا
+  x = x.replace(/[\u0622\u0623\u0625\u0671\u0672\u0673]/g, '\u0627');
+  // ya / alef-maksura variants → ی
+  x = x.replace(/[\u064A\u0649]/g, '\u06CC');
+  // kaf variants → ک
+  x = x.replace(/[\u0643]/g, '\u06A9');
+  // heh variants → ہ
+  x = x.replace(/[\u0647\u06C1\u06C3\u0629]/g, '\u06C1');
+  // hamza standalone → drop
+  x = x.replace(/[\u0621\u0624\u0626]/g, '');
+  // strip latin honorifics / relator words
+  x = x.replace(/\b(s\/o|d\/o|w\/o|mr|mrs|mst|miss|ch|chaudhry|raja|malik|haji|sheikh|syed|mian|bin|binte|bint)\b\.?/gi, '');
+  // collapse non-letter punctuation to space
+  x = x.replace(/[.,()\[\]{}؛،"'`/\\|_:;!?]/g, ' ');
+  x = x.replace(/\s+/g, ' ').trim();
+  return x;
+}
+
+/** Character-bigram Dice coefficient (0..1) — same intent as pg_trgm. */
+function bigrams(s: string): Map<string, number> {
+  const m = new Map<string, number>();
+  const padded = ` ${s} `;
+  for (let i = 0; i < padded.length - 1; i++) {
+    const bg = padded.slice(i, i + 2);
+    m.set(bg, (m.get(bg) ?? 0) + 1);
+  }
+  return m;
+}
+function nameSimilarity(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const A = bigrams(a);
+  const B = bigrams(b);
+  let inter = 0;
+  let szA = 0;
+  let szB = 0;
+  for (const v of A.values()) szA += v;
+  for (const v of B.values()) szB += v;
+  for (const [bg, na] of A) {
+    const nb = B.get(bg);
+    if (nb) inter += Math.min(na, nb);
+  }
+  if (szA + szB === 0) return 0;
+  return (2 * inter) / (szA + szB);
+}
+const PARENT_SIM = 0.55;   // mirrors SmartNigranVoter PARENT_THRESHOLD
 
 function isFemale(v: VoterRow): boolean {
   const g = (v.gender || '').toLowerCase();
@@ -35,33 +93,60 @@ function isMale(v: VoterRow): boolean {
  *                           → "Husband"
  *   - Female voter otherwise → "Father"  (treated as a daughter listed under her father)
  */
-function kinshipLabel(voter: VoterRow, activeMaleNames: Set<string>): 'Father' | 'Husband' {
+function kinshipLabel(voter: VoterRow, activeMaleNames: string[]): 'Father' | 'Husband' {
   if (!isFemale(voter)) return 'Father';
-  const linked = normalize(voter.father_husband_name);
+  const linked = normalizeName(voter.father_husband_name);
   if (!linked) return 'Father';
   const isAdult = voter.age == null || voter.age >= 20;
-  if (isAdult && activeMaleNames.has(linked)) return 'Husband';
+  if (!isAdult) return 'Father';
+  for (const n of activeMaleNames) {
+    if (nameSimilarity(linked, n) >= PARENT_SIM) return 'Husband';
+  }
   return 'Father';
 }
 
-/** Pick the head: a member whose father/husband name is NOT another member's name. */
+/**
+ * Pick the patriarch (head of household):
+ *   1. Prefer the oldest male whose `father_husband_name` does NOT fuzzy-match
+ *      any other member's name (i.e. his father isn't on the roll → he IS
+ *      the eldest generation present).
+ *   2. Otherwise fall back to the oldest male.
+ *   3. Otherwise the oldest member.
+ */
 function chooseHead(members: VoterRow[]): VoterRow {
-  const names = new Set(members.map((m) => normalize(m.name)));
-  return members.find((m) => !names.has(normalize(m.father_husband_name))) ?? members[0];
+  const males = members.filter(isMale);
+  const candidates = (males.length ? males : members)
+    .slice()
+    .sort((a, b) => (b.age ?? 0) - (a.age ?? 0));
+
+  const nameKeys = members.map((m) => normalizeName(m.name));
+  const isPatriarch = (m: VoterRow): boolean => {
+    const fk = normalizeName(m.father_husband_name);
+    if (!fk) return true;
+    for (let i = 0; i < members.length; i++) {
+      if (members[i].id === m.id) continue;
+      if (nameSimilarity(fk, nameKeys[i]) >= PARENT_SIM) return false;
+    }
+    return true;
+  };
+  return candidates.find(isPatriarch) ?? candidates[0] ?? members[0];
 }
 
-/** Match the reference's spouse heuristic (relaxed for AJK rolls). */
+/**
+ * Spouse heuristic: a female whose father_husband_name fuzzy-matches `head.name`
+ * and is of marriageable age (≥20 or unknown). Picks the closest age gap.
+ */
 function findSpouse(head: VoterRow, candidates: VoterRow[], used: Set<string>): VoterRow | undefined {
   if (isFemale(head)) return undefined;
-  const headName = normalize(head.name);
-  if (!headName) return undefined;
+  const headKey = normalizeName(head.name);
+  if (!headKey) return undefined;
 
   let best: VoterRow | undefined;
   let bestGap = Number.POSITIVE_INFINITY;
   for (const c of candidates) {
     if (used.has(c.id) || c.id === head.id) continue;
     if (!isFemale(c)) continue;
-    if (normalize(c.father_husband_name) !== headName) continue;
+    if (nameSimilarity(normalizeName(c.father_husband_name), headKey) < PARENT_SIM) continue;
     if (c.age != null && c.age < 20) continue;
     const gap = head.age != null && c.age != null ? Math.abs(head.age - c.age) : 15;
     if (gap > 35) continue;
@@ -79,30 +164,88 @@ interface TreeNode {
   children: TreeNode[];
 }
 
+/**
+ * Build a hierarchical family tree.
+ *
+ * Algorithm (mirrors SmartNigranVoter `build_family_tree`):
+ *   1. Choose the patriarch (head).
+ *   2. For every non-head member, find the BEST parent within the family by
+ *      fuzzy-matching `member.father_husband_name` to other members' `name`
+ *      (Dice on character bigrams, ≥ PARENT_SIM).
+ *   3. If no parent is found, attach the member as a direct child of the head
+ *      (so we never end up with a flat sibling row at the root).
+ *   4. Attach spouses (one per node, females only) so that wives appear beside
+ *      their husbands rather than as orphan branches.
+ *   5. Sort children eldest-first so the rendered tree reads naturally.
+ */
 function buildTree(members: VoterRow[]): TreeNode[] {
-  const used = new Set<string>();
+  if (members.length === 0) return [];
   const head = chooseHead(members);
 
+  // Precompute normalized keys once.
+  const nameKey = new Map<string, string>();
+  const fatherKey = new Map<string, string>();
+  for (const m of members) {
+    nameKey.set(m.id, normalizeName(m.name));
+    fatherKey.set(m.id, normalizeName(m.father_husband_name));
+  }
+
+  // For every member, decide their best parent inside the family.
+  // The head has no parent. Spouses are resolved separately later.
+  const parentOf = new Map<string, string | null>();
+  parentOf.set(head.id, null);
+
+  for (const m of members) {
+    if (m.id === head.id) continue;
+    const fk = fatherKey.get(m.id) ?? '';
+    if (!fk) {
+      parentOf.set(m.id, head.id);
+      continue;
+    }
+    let bestId: string | null = null;
+    let bestSim = PARENT_SIM;
+    for (const p of members) {
+      if (p.id === m.id) continue;
+      const sim = nameSimilarity(fk, nameKey.get(p.id) ?? '');
+      if (sim > bestSim) { bestSim = sim; bestId = p.id; }
+    }
+    // No fuzzy parent → fall under the head so the tree stays hierarchical.
+    parentOf.set(m.id, bestId ?? head.id);
+  }
+
+  // Children index.
+  const childrenOf = new Map<string, VoterRow[]>();
+  for (const m of members) {
+    const pid = parentOf.get(m.id);
+    if (pid == null) continue;
+    const arr = childrenOf.get(pid) ?? [];
+    arr.push(m);
+    childrenOf.set(pid, arr);
+  }
+
+  // Recursive build with spouse attachment + cycle guard.
+  const used = new Set<string>();
   const buildNode = (voter: VoterRow, relation: Relation): TreeNode => {
     used.add(voter.id);
-    const spouse = relation === 'self' || relation === 'child'
-      ? findSpouse(voter, members, used)
-      : undefined;
+    const spouse = findSpouse(voter, members, used);
     if (spouse) used.add(spouse.id);
 
-    const childRelation: Relation = relation === 'self' ? 'child' : 'grandchild';
-    const children: TreeNode[] = [];
-    for (const cand of members) {
-      if (used.has(cand.id)) continue;
-      if (normalize(cand.father_husband_name) === normalize(voter.name)) {
-        children.push(buildNode(cand, childRelation));
-      }
-    }
-    children.sort((a, b) => (b.voter.age ?? 0) - (a.voter.age ?? 0));
+    const childRel: Relation =
+      relation === 'self' ? 'child' :
+      relation === 'child' ? 'grandchild' :
+      relation === 'grandchild' ? 'grandchild' : 'child';
+
+    const kids = (childrenOf.get(voter.id) ?? [])
+      .filter((c) => !used.has(c.id))
+      .sort((a, b) => (b.age ?? 0) - (a.age ?? 0));
+    const children = kids.map((c) => buildNode(c, childRel));
+
     return { voter, spouse, relation, children };
   };
 
   const roots: TreeNode[] = [buildNode(head, 'self')];
+  // Safety net: anyone still unassigned (e.g. cycle break) becomes a sibling
+  // member-row, but with our fallback-to-head this should be rare.
   for (const m of members) {
     if (!used.has(m.id)) roots.push(buildNode(m, 'member'));
   }
@@ -137,7 +280,7 @@ const RELATION_LABEL: Record<Relation, string> = {
 
 function TreeCard({
   voter, relation, isEgo, activeMaleNames, onSelect,
-}: Readonly<{ voter: VoterRow; relation: Relation; isEgo?: boolean; activeMaleNames: Set<string>; onSelect: (v: VoterRow) => void }>) {
+}: Readonly<{ voter: VoterRow; relation: Relation; isEgo?: boolean; activeMaleNames: string[]; onSelect: (v: VoterRow) => void }>) {
   const p = palette(voter.voter_status);
   const kin = kinshipLabel(voter, activeMaleNames);
   const kinName = voter.father_husband_name?.trim();
@@ -175,7 +318,7 @@ function TreeCard({
   );
 }
 
-function Subtree({ node, isEgo, activeMaleNames, onSelect }: Readonly<{ node: TreeNode; isEgo?: boolean; activeMaleNames: Set<string>; onSelect: (v: VoterRow) => void }>) {
+function Subtree({ node, isEgo, activeMaleNames, onSelect }: Readonly<{ node: TreeNode; isEgo?: boolean; activeMaleNames: string[]; onSelect: (v: VoterRow) => void }>) {
   return (
     <li>
       {node.spouse ? (
@@ -242,9 +385,10 @@ export function FamilyTree({ families }: Readonly<{ families: FamilyGroup[] }>) 
         // Active male voters in this family — used to decide whether a female's
         // `father_husband_name` should be labelled "Husband" (active spouse in roll)
         // vs "Father" (she is a daughter listed under her father).
-        const activeMaleNames = new Set(
-          family.members.filter(isMale).map((m) => normalize(m.name)).filter(Boolean)
-        );
+        const activeMaleNames = family.members
+          .filter(isMale)
+          .map((m) => normalizeName(m.name))
+          .filter(Boolean);
         return (
           <div key={family.inferred_family_id} className="panel p-4">
             <header className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
