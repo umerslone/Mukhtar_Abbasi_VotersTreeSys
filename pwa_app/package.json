@@ -1,0 +1,33 @@
+{
+  "name": "voters-tree-pwa",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "postinstall": "node scripts/copy-sqljs-wasm.mjs"
+  },
+  "dependencies": {
+    "jspdf": "^3.0.1",
+    "localforage": "^1.10.0",
+    "lucide-react": "^0.542.0",
+    "next": "^15.3.3",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-dropzone": "^14.3.8",
+    "react-window": "^1.8.11",
+    "xlsx": "^0.18.5",
+    "sql.js": "^1.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3"
+  }
+}

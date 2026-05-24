@@ -1,0 +1,36 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Voter {
+  id                  String   @id @default(cuid())
+  block_code          String
+  serial_no           String
+  name                String
+  father_husband_name String
+  cnic                String
+  profession          String   @default("")
+  age                 Int?
+  address             String
+  inferred_family_id  String
+  gender              String?
+  voter_status        String   @default("Unsurveyed")
+  is_on_duty          Boolean  @default(false)
+  tags                String[] @default([])
+  source_batch        String?
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  @@index([inferred_family_id])
+  @@index([block_code, address])
+  @@index([cnic])
+  @@index([name])
+  @@index([source_batch])
+}

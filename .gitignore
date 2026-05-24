@@ -1,0 +1,23 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+.env
+.env.local
+.env.*.local
+__pycache__/
+*.pyc
+*.sqlite
+*.db
+.venv/
+.pwaworker/
+.DS_Store
+.vercel/
+
+# Voter PII — never commit
+etl_pipeline/voters.json
+etl_pipeline/layout_dump.json
+etl_pipeline/*.sqlite
+etl_pipeline/output/
+*.pdf

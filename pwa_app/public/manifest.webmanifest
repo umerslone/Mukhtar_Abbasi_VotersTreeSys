@@ -1,0 +1,9 @@
+{
+  "name": "Standalone Offline Voter Management System",
+  "short_name": "VoterTree",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6efe5",
+  "theme_color": "#0f172a",
+  "lang": "ur"
+}

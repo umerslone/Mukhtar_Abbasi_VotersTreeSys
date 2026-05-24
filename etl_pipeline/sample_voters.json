@@ -1,0 +1,26 @@
+[
+  { "block_code": "B-001", "serial_no": "1",  "name": "محمد اسلم",        "father_husband_name": "محمد یوسف",     "cnic": "35202-1234567-1", "age": 58, "address": "گلی نمبر 4، محلہ شاہ پور، لاہور", "profession": "دکاندار" },
+  { "block_code": "B-001", "serial_no": "2",  "name": "فاطمہ بی بی",      "father_husband_name": "محمد اسلم",     "cnic": "35202-1234568-2", "age": 54, "address": "گلی نمبر 4، محلہ شاہ پور، لاہور", "profession": "گھریلو" },
+  { "block_code": "B-001", "serial_no": "3",  "name": "علی حسن",          "father_husband_name": "محمد اسلم",     "cnic": "35202-1234569-3", "age": 30, "address": "گلی نمبر 4، محلہ شاہ پور، لاہور", "profession": "ٹیچر" },
+  { "block_code": "B-001", "serial_no": "4",  "name": "زینب علی",         "father_husband_name": "علی حسن",       "cnic": "35202-1234570-4", "age": 27, "address": "گلی نمبر 4، محلہ شاہ پور، لاہور", "profession": "گھریلو" },
+  { "block_code": "B-001", "serial_no": "5",  "name": "احمد رضا",         "father_husband_name": "علی حسن",       "cnic": "35202-1234571-5", "age": 5,  "address": "گلی نمبر 4، محلہ شاہ پور، لاہور", "profession": "" },
+
+  { "block_code": "B-001", "serial_no": "6",  "name": "غلام رسول",        "father_husband_name": "نور محمد",      "cnic": "35202-2234567-1", "age": 64, "address": "گلی نمبر 7، محلہ شاہ پور، لاہور", "profession": "ریٹائرڈ" },
+  { "block_code": "B-001", "serial_no": "7",  "name": "رشیدہ بی بی",      "father_husband_name": "غلام رسول",     "cnic": "35202-2234568-2", "age": 60, "address": "گلی نمبر 7، محلہ شاہ پور، لاہور", "profession": "گھریلو" },
+  { "block_code": "B-001", "serial_no": "8",  "name": "بلال احمد",        "father_husband_name": "غلام رسول",     "cnic": "35202-2234569-3", "age": 34, "address": "گلی نمبر 7، محلہ شاہ پور، لاہور", "profession": "ڈرائیور" },
+
+  { "block_code": "B-002", "serial_no": "9",  "name": "خالد محمود",       "father_husband_name": "محمد شفیع",     "cnic": "35202-3334567-1", "age": 49, "address": "مکان نمبر 12، نزد جامع مسجد، گجرات", "profession": "وکیل" },
+  { "block_code": "B-002", "serial_no": "10", "name": "نسرین خالد",       "father_husband_name": "خالد محمود",    "cnic": "35202-3334568-2", "age": 45, "address": "مکان نمبر 12، نزد جامع مسجد، گجرات", "profession": "ٹیچر" },
+  { "block_code": "B-002", "serial_no": "11", "name": "حمزہ خالد",        "father_husband_name": "خالد محمود",    "cnic": "35202-3334569-3", "age": 22, "address": "مکان نمبر 12، نزد جامع مسجد، گجرات", "profession": "طالب علم" },
+  { "block_code": "B-002", "serial_no": "12", "name": "ایمان خالد",       "father_husband_name": "خالد محمود",    "cnic": "35202-3334570-4", "age": 18, "address": "مکان نمبر 12، نزد جامع مسجد، گجرات", "profession": "طالبہ" },
+
+  { "block_code": "B-002", "serial_no": "13", "name": "عبدالستار",        "father_husband_name": "عبدالغفور",     "cnic": "35202-4434567-1", "age": 71, "address": "مکان نمبر 27، چوک نمبر 3، گجرات",   "profession": "ریٹائرڈ" },
+  { "block_code": "B-002", "serial_no": "14", "name": "سکینہ بی بی",      "father_husband_name": "عبدالستار",     "cnic": "35202-4434568-2", "age": 65, "address": "مکان نمبر 27، چوک نمبر 3، گجرات",   "profession": "گھریلو" },
+  { "block_code": "B-002", "serial_no": "15", "name": "عمران ستار",       "father_husband_name": "عبدالستار",     "cnic": "35202-4434569-3", "age": 38, "address": "مکان نمبر 27، چوک نمبر 3، گجرات",   "profession": "انجینئر" },
+  { "block_code": "B-002", "serial_no": "16", "name": "ثناء عمران",       "father_husband_name": "عمران ستار",    "cnic": "35202-4434570-4", "age": 32, "address": "مکان نمبر 27، چوک نمبر 3، گجرات",   "profession": "ڈاکٹر" },
+  { "block_code": "B-002", "serial_no": "17", "name": "حسن عمران",        "father_husband_name": "عمران ستار",    "cnic": "35202-4434571-5", "age": 8,  "address": "مکان نمبر 27، چوک نمبر 3، گجرات",   "profession": "" },
+
+  { "block_code": "B-002", "serial_no": "18", "name": "طارق پرویز",       "father_husband_name": "پرویز مسیح",    "cnic": "35202-5534567-1", "age": 41, "address": "مکان نمبر 9، گلبرگ کالونی، گجرات",  "profession": "بزنس مین" },
+  { "block_code": "B-002", "serial_no": "19", "name": "صائمہ طارق",       "father_husband_name": "طارق پرویز",    "cnic": "35202-5534568-2", "age": 37, "address": "مکان نمبر 9، گلبرگ کالونی، گجرات",  "profession": "گھریلو" },
+  { "block_code": "B-002", "serial_no": "20", "name": "علیشہ طارق",       "father_husband_name": "طارق پرویز",    "cnic": "35202-5534570-4", "age": 14, "address": "مکان نمبر 9، گلبرگ کالونی، گجرات",  "profession": "طالبہ" }
+]
