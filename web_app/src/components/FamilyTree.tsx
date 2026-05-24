@@ -9,70 +9,16 @@
 
 import { useState } from 'react';
 import type { FamilyGroup, VoterRow } from '@/lib/types';
+import { normalizeName, nameSimilarity } from '@/lib/urdu_alphabet';
 import { TagModal } from './VoterTag';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-/** Lightweight normalize used for label comparison (kept for kinshipLabel). */
+/** Backward-compatible alias used inside this file. */
 function normalize(s: string): string {
   return normalizeName(s);
 }
 
-/**
- * Urdu/Arabic-aware name normalizer — collapses common spelling variants
- * (alef forms, ya/ta/ha variants, hamza, diacritics) and strips honorifics
- * so that OCR-drifted names from the voter roll match each other.
- */
-function normalizeName(s: string): string {
-  if (!s) return '';
-  let x = s.trim().toLowerCase();
-  // remove tatweel + Arabic diacritics (harakat)
-  x = x.replace(/[\u0640\u064B-\u0652\u0670\u06D6-\u06ED]/g, '');
-  // unify alef family → ا
-  x = x.replace(/[\u0622\u0623\u0625\u0671\u0672\u0673]/g, '\u0627');
-  // ya / alef-maksura variants → ی
-  x = x.replace(/[\u064A\u0649]/g, '\u06CC');
-  // kaf variants → ک
-  x = x.replace(/[\u0643]/g, '\u06A9');
-  // heh variants → ہ
-  x = x.replace(/[\u0647\u06C1\u06C3\u0629]/g, '\u06C1');
-  // hamza standalone → drop
-  x = x.replace(/[\u0621\u0624\u0626]/g, '');
-  // strip latin honorifics / relator words
-  x = x.replace(/\b(s\/o|d\/o|w\/o|mr|mrs|mst|miss|ch|chaudhry|raja|malik|haji|sheikh|syed|mian|bin|binte|bint)\b\.?/gi, '');
-  // collapse non-letter punctuation to space
-  x = x.replace(/[.,()\[\]{}؛،"'`/\\|_:;!?]/g, ' ');
-  x = x.replace(/\s+/g, ' ').trim();
-  return x;
-}
-
-/** Character-bigram Dice coefficient (0..1) — same intent as pg_trgm. */
-function bigrams(s: string): Map<string, number> {
-  const m = new Map<string, number>();
-  const padded = ` ${s} `;
-  for (let i = 0; i < padded.length - 1; i++) {
-    const bg = padded.slice(i, i + 2);
-    m.set(bg, (m.get(bg) ?? 0) + 1);
-  }
-  return m;
-}
-function nameSimilarity(a: string, b: string): number {
-  if (!a || !b) return 0;
-  if (a === b) return 1;
-  const A = bigrams(a);
-  const B = bigrams(b);
-  let inter = 0;
-  let szA = 0;
-  let szB = 0;
-  for (const v of A.values()) szA += v;
-  for (const v of B.values()) szB += v;
-  for (const [bg, na] of A) {
-    const nb = B.get(bg);
-    if (nb) inter += Math.min(na, nb);
-  }
-  if (szA + szB === 0) return 0;
-  return (2 * inter) / (szA + szB);
-}
 const PARENT_SIM = 0.55;   // mirrors SmartNigranVoter PARENT_THRESHOLD
 
 function isFemale(v: VoterRow): boolean {

@@ -19,6 +19,8 @@ from azure.core.credentials import AzureKeyCredential
 from openai import AzureOpenAI
 from pypdf import PdfReader, PdfWriter
 
+from urdu_alphabet import ai_prompt_hint, correct_name
+
 # Max pages per Document Intelligence request to stay below the 500MB / size limits.
 PDF_CHUNK_PAGES = int(os.getenv("PDF_CHUNK_PAGES", "20"))
 # Max bytes per request. Free tier (F0) caps at ~4 MB; paid (S0) at 500 MB.
@@ -314,7 +316,11 @@ def extract_rows_from_tables(tables: list[dict[str, Any]]) -> list[RawVoterRow]:
 
 
 def _ai_cleanup_batch(client: Any, batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    system_prompt = "You are an Urdu OCR corrector. Fix broken characters in these names. Output strict JSON matching the DB schema."
+    system_prompt = (
+        "You are an Urdu OCR corrector. Fix broken characters in these names. "
+        "Output strict JSON matching the DB schema.\n\n"
+        + ai_prompt_hint()
+    )
     response = client.with_options(timeout=120.0).chat.completions.create(
         model=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
         temperature=0,
@@ -393,7 +399,11 @@ def cnic_gender(cnic: str) -> str:
 
 
 def normalize_text(value: str) -> str:
-    return re.sub(r"\s+", " ", value.strip().lower())
+    # Canonicalise via the Urdu alphabet library so OCR variants (آ/أ ↔ ا,
+    # ي ↔ ی, ك ↔ ک, ه ↔ ہ, kashida, diacritics, honorifics) collapse before
+    # we cluster rows into families.
+    canon = correct_name(value or "")
+    return re.sub(r"\s+", " ", canon.strip().lower())
 
 
 def infer_family_ids(rows: list[dict[str, Any]]) -> list[CleanVoterRow]:
