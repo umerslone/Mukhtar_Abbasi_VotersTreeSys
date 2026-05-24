@@ -22,6 +22,28 @@ function isFemale(v: VoterRow): boolean {
   return g.startsWith('f') || g.includes('female') || g.includes('عورت');
 }
 
+function isMale(v: VoterRow): boolean {
+  const g = (v.gender || '').toLowerCase();
+  return g.startsWith('m') || g.includes('male') || g.includes('مرد');
+}
+
+/**
+ * Resolve the correct kinship label for a voter:
+ *   - Male voter           → "Father"  (father_husband_name is the father)
+ *   - Female voter with an active male spouse in this family whose name
+ *     matches her father_husband_name (and she is of marriageable age)
+ *                           → "Husband"
+ *   - Female voter otherwise → "Father"  (treated as a daughter listed under her father)
+ */
+function kinshipLabel(voter: VoterRow, activeMaleNames: Set<string>): 'Father' | 'Husband' {
+  if (!isFemale(voter)) return 'Father';
+  const linked = normalize(voter.father_husband_name);
+  if (!linked) return 'Father';
+  const isAdult = voter.age == null || voter.age >= 20;
+  if (isAdult && activeMaleNames.has(linked)) return 'Husband';
+  return 'Father';
+}
+
 /** Pick the head: a member whose father/husband name is NOT another member's name. */
 function chooseHead(members: VoterRow[]): VoterRow {
   const names = new Set(members.map((m) => normalize(m.name)));
@@ -114,9 +136,11 @@ const RELATION_LABEL: Record<Relation, string> = {
 // ── Node card ──────────────────────────────────────────────────────────
 
 function TreeCard({
-  voter, relation, isEgo, onSelect,
-}: Readonly<{ voter: VoterRow; relation: Relation; isEgo?: boolean; onSelect: (v: VoterRow) => void }>) {
+  voter, relation, isEgo, activeMaleNames, onSelect,
+}: Readonly<{ voter: VoterRow; relation: Relation; isEgo?: boolean; activeMaleNames: Set<string>; onSelect: (v: VoterRow) => void }>) {
   const p = palette(voter.voter_status);
+  const kin = kinshipLabel(voter, activeMaleNames);
+  const kinName = voter.father_husband_name?.trim();
   return (
     <button
       type="button"
@@ -134,6 +158,11 @@ function TreeCard({
         {voter.is_on_duty ? <span className="fam-duty">🎖️</span> : null}
       </div>
       <div className="urdu rtl fam-name" dir="rtl">{voter.name || '(no name)'}</div>
+      {kinName ? (
+        <div className="urdu rtl fam-father" dir="rtl">
+          <span className="fam-kin-label">{kin === 'Husband' ? 'شوہر' : 'والد'}:</span>{' '}{kinName}
+        </div>
+      ) : null}
       <div className="fam-meta">
         <span>CNIC: {voter.cnic || '—'}</span>
         {voter.age ? <span> · {voter.age}y</span> : null}
@@ -146,22 +175,22 @@ function TreeCard({
   );
 }
 
-function Subtree({ node, isEgo, onSelect }: Readonly<{ node: TreeNode; isEgo?: boolean; onSelect: (v: VoterRow) => void }>) {
+function Subtree({ node, isEgo, activeMaleNames, onSelect }: Readonly<{ node: TreeNode; isEgo?: boolean; activeMaleNames: Set<string>; onSelect: (v: VoterRow) => void }>) {
   return (
     <li>
       {node.spouse ? (
         <div className="fam-couple">
-          <TreeCard voter={node.voter} relation={node.relation} isEgo={isEgo} onSelect={onSelect} />
+          <TreeCard voter={node.voter} relation={node.relation} isEgo={isEgo} activeMaleNames={activeMaleNames} onSelect={onSelect} />
           <span className="fam-couple-link" aria-hidden="true">♥</span>
-          <TreeCard voter={node.spouse} relation="spouse" onSelect={onSelect} />
+          <TreeCard voter={node.spouse} relation="spouse" activeMaleNames={activeMaleNames} onSelect={onSelect} />
         </div>
       ) : (
-        <TreeCard voter={node.voter} relation={node.relation} isEgo={isEgo} onSelect={onSelect} />
+        <TreeCard voter={node.voter} relation={node.relation} isEgo={isEgo} activeMaleNames={activeMaleNames} onSelect={onSelect} />
       )}
       {node.children.length > 0 ? (
         <ul>
           {node.children.map((child) => (
-            <Subtree key={child.voter.id} node={child} onSelect={onSelect} />
+            <Subtree key={child.voter.id} node={child} activeMaleNames={activeMaleNames} onSelect={onSelect} />
           ))}
         </ul>
       ) : null}
@@ -210,6 +239,12 @@ export function FamilyTree({ families }: Readonly<{ families: FamilyGroup[] }>) 
       {families.map((family) => {
         const roots = buildTree(family.members);
         const inf = computeInfluence(family.members);
+        // Active male voters in this family — used to decide whether a female's
+        // `father_husband_name` should be labelled "Husband" (active spouse in roll)
+        // vs "Father" (she is a daughter listed under her father).
+        const activeMaleNames = new Set(
+          family.members.filter(isMale).map((m) => normalize(m.name)).filter(Boolean)
+        );
         return (
           <div key={family.inferred_family_id} className="panel p-4">
             <header className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
@@ -234,7 +269,7 @@ export function FamilyTree({ families }: Readonly<{ families: FamilyGroup[] }>) 
             <div className="fam-tree-scroll">
               <ul className="fam-tree">
                 {roots.map((root, idx) => (
-                  <Subtree key={root.voter.id} node={root} isEgo={idx === 0} onSelect={setSelected} />
+                  <Subtree key={root.voter.id} node={root} isEgo={idx === 0} activeMaleNames={activeMaleNames} onSelect={setSelected} />
                 ))}
               </ul>
             </div>

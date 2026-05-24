@@ -424,6 +424,11 @@ body {
   line-height: 1.6;
   color: rgba(15,23,42,.75);
 }
+.fam-kin-label {
+  font-weight: 800;
+  color: rgba(15,23,42,.6);
+  margin-inline-end: .2rem;
+}
 .fam-pill {
   display: inline-block;
   margin-top: .45rem;
