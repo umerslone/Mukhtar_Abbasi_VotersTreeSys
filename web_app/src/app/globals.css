@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Urdu Nastaliq typography ─────────────────────────────────────────── */
 @font-face {
   font-family: 'Jameel Noori Nastaleeq';
   src: local('Jameel Noori Nastaleeq'),
@@ -9,46 +10,452 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'Noto Nastaliq Urdu';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/notonastaliqurdu/v23/LhW4MUPbN-oZdNFcBy1-DJYsEoTq5pu3SvoMC9Y.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1,
+                 U+08E3-08FF, U+200C-200E, U+FB50-FDFF, U+FE70-FEFF;
+}
+
+/* ── TechPigeon / Smart Nigraan brand tokens ──────────────────────────── */
 :root {
-  --bg: #f8fafc;
-  --ink: #0f172a;
+  /* Brand */
+  --tp-navy: #0B1D3A;
+  --tp-navy-2: #1E3A5F;
+  --tp-gold: #BBA442;
+  --tp-gold-dark: #9A8735;
+  --tp-gold-soft: #F5EDC8;
+  --tp-sky: #5CC4EB;
+  --tp-cream: #FAF8F0;
+
+  /* Surfaces */
+  --bg: #F7F9FC;
+  --surface: #FFFFFF;
+  --line: #E2E8F0;
+  --line-strong: #CBD5E1;
+
+  /* Text */
+  --ink: #0F172A;
   --muted: #475569;
-  --line: rgba(15, 23, 42, 0.12);
+
+  /* Status (legacy, used by VoterTag) */
   --supporter: #16a34a;
   --nonsupporter: #dc2626;
   --undecided: #6b7280;
+
+  /* Radii / shadows */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --shadow-1: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06);
+  --shadow-2: 0 4px 14px rgba(15,23,42,.08);
+  --shadow-brand: 0 18px 40px rgba(11,29,58,.30);
 }
 
-html {
-  scroll-behavior: smooth;
-}
+html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
+  background: linear-gradient(180deg, var(--bg) 0%, #EEF2F8 100%);
   color: var(--ink);
-  font-family: 'Jameel Noori Nastaleeq', 'Noto Nastaliq Urdu', system-ui, sans-serif;
+  font-family: 'Jameel Noori Nastaleeq', 'Noto Nastaliq Urdu',
+               -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI',
+               Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
 }
 
-.urdu {
+* { box-sizing: border-box; }
+
+/* ── Urdu helpers ─────────────────────────────────────────────────────── */
+.urdu, [lang="ur"], [dir="rtl"] {
   font-family: 'Jameel Noori Nastaleeq', 'Noto Nastaliq Urdu', serif;
-  font-size: 1.2rem;
-  line-height: 2;
+  line-height: 1.9;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  text-rendering: optimizeLegibility;
 }
+
+.urdu { font-size: 1.2rem; }
 
 .rtl {
   direction: rtl;
   text-align: right;
 }
 
+/* ── Card primitives ──────────────────────────────────────────────────── */
 .panel {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 18px;
-  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
 }
 
-* {
-  box-sizing: border-box;
+.snvb-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 1rem;
+  box-shadow: var(--shadow-1);
+  margin-bottom: .75rem;
+}
+
+.snvb-badge {
+  display: inline-block;
+  padding: .12rem .55rem;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+}
+
+.snvb-label-upper {
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ── Brand nav pill (active / inactive) ──────────────────────────────── */
+.nav-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: .5rem 1rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: .875rem;
+  border: 1px solid transparent;
+  transition: background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.nav-pill--primary {
+  background: var(--tp-navy);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(11,29,58,.25);
+}
+.nav-pill--primary:hover { background: var(--tp-navy-2); }
+.nav-pill--ghost {
+  background: var(--surface);
+  color: var(--tp-navy);
+  border-color: var(--line-strong);
+}
+.nav-pill--ghost:hover {
+  border-color: var(--tp-navy);
+  background: #F1F5F9;
+}
+
+/* ── Brand button ─────────────────────────────────────────────────────── */
+.btn-brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tp-navy);
+  color: #fff;
+  padding: .75rem 1rem;
+  border-radius: var(--r-sm);
+  font-weight: 600;
+  border: 1px solid var(--tp-navy);
+  transition: background .15s ease, box-shadow .15s ease;
+}
+.btn-brand:hover {
+  background: var(--tp-navy-2);
+  box-shadow: var(--shadow-2);
+}
+.btn-brand:disabled { opacity: .6; cursor: not-allowed; }
+
+/* ── Login hero card (navy gradient + gold radial glow) ─────────────── */
+.login-card {
+  background: linear-gradient(140deg, var(--tp-navy) 0%, var(--tp-navy-2) 100%);
+  border-radius: var(--r-lg);
+  padding: 2rem 1.75rem;
+  box-shadow: var(--shadow-brand);
+  border: 1px solid rgba(255,255,255,.08);
+  color: #F1F5F9;
+  position: relative;
+  overflow: hidden;
+}
+.login-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -30% -60% auto;
+  width: 360px; height: 360px;
+  background: radial-gradient(closest-side, rgba(187,164,66,.35), transparent 70%);
+  pointer-events: none;
+}
+.login-card h1 {
+  font-size: clamp(1.4rem, 5vw, 1.9rem);
+  font-weight: 800;
+  margin: 0 0 .3rem 0;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+.login-card p { margin: 0 0 .25rem 0; opacity: .88; }
+.login-card label { color: #E2E8F0; }
+.login-card input {
+  background: rgba(255,255,255,.08);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.18);
+}
+.login-card input::placeholder { color: rgba(241,245,249,.5); }
+.login-card input:focus {
+  outline: none;
+  border-color: var(--tp-gold);
+  box-shadow: 0 0 0 3px rgba(187,164,66,.25);
+}
+
+/* ── Brand header chrome (dashboard hero) ─────────────────────────── */
+.brand-header {
+  background: linear-gradient(135deg, var(--tp-navy) 0%, var(--tp-navy-2) 100%);
+  color: #F1F5F9;
+  border-radius: var(--r-lg);
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--shadow-brand);
+  position: relative;
+  overflow: hidden;
+}
+.brand-header::after {
+  content: "";
+  position: absolute;
+  inset: auto -25% -55% auto;
+  width: 320px; height: 320px;
+  background: radial-gradient(closest-side, rgba(187,164,66,.30), transparent 70%);
+  pointer-events: none;
+}
+.brand-header h1 { color: #fff; }
+.brand-header .eyebrow {
+  color: var(--tp-gold-soft);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .32em;
+  text-transform: uppercase;
+}
+
+/* Inverted nav pills inside the navy hero */
+.brand-header .nav-pill--primary {
+  background: var(--tp-gold);
+  color: var(--tp-navy);
+  box-shadow: 0 6px 18px rgba(187,164,66,.35);
+}
+.brand-header .nav-pill--primary:hover { background: var(--tp-gold-dark); color: #fff; }
+.brand-header .nav-pill--ghost {
+  background: rgba(255,255,255,.08);
+  color: #F1F5F9;
+  border-color: rgba(255,255,255,.18);
+}
+.brand-header .nav-pill--ghost:hover {
+  background: rgba(255,255,255,.16);
+  border-color: var(--tp-gold);
+  color: #fff;
+}
+
+/* ── Family tree (Graphviz-style top-down hierarchy) ─────────────────── */
+.fam-tree-scroll {
+  margin-top: 1rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: .5rem;
+  display: flex;
+  align-items: stretch;
+  gap: .5rem;
+}
+
+/* Left swim-lane labels — one band per generation */
+.fam-lanes {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-width: 28px;
+  padding-top: 1.25rem;
+}
+.fam-lane {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--tp-gold-dark, #9A8735);
+  background: linear-gradient(180deg, rgba(187,164,66,0.08), rgba(187,164,66,0.18));
+  border-left: 3px solid var(--tp-gold, #BBA442);
+  border-radius: 4px;
+  padding: .5rem .15rem;
+  margin-bottom: .25rem;
+  white-space: nowrap;
+}
+.fam-lane:last-child { margin-bottom: 0; }
+@media (max-width: 640px) {
+  .fam-lanes { display: none; }
+}
+
+/* Classic CSS org-chart connectors (Thirus pattern) */
+.fam-tree,
+.fam-tree ul {
+  position: relative;
+  padding: 1.25rem 0 0 0;
+  margin: 0;
+  list-style: none;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.fam-tree ul {
+  padding-top: 1.25rem;
+}
+.fam-tree li {
+  position: relative;
+  padding: 1.25rem .4rem 0 .4rem;
+  text-align: center;
+  list-style: none;
+}
+
+/* Horizontal sibling connector lines (top of each node) */
+.fam-tree li::before,
+.fam-tree li::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  height: 1.25rem;
+  border-top: 1.5px solid var(--line-strong);
+  width: 50%;
+}
+.fam-tree li::before { left: 0; }
+.fam-tree li::after  { left: 50%; border-left: 1.5px solid var(--line-strong); }
+
+/* Only-child: no horizontal line, just the vertical drop */
+.fam-tree > li:only-child,
+.fam-tree ul > li:only-child {
+  padding-top: 1.25rem;
+}
+.fam-tree > li:only-child::before,
+.fam-tree > li:only-child::after,
+.fam-tree ul > li:only-child::before,
+.fam-tree ul > li:only-child::after {
+  display: none;
+}
+
+/* First/last child rounding so the sibling bar doesn't extend past the row */
+.fam-tree li:first-child::before,
+.fam-tree li:last-child::after { border: 0 none; }
+.fam-tree li:last-child::before {
+  border-right: 1.5px solid var(--line-strong);
+  border-radius: 0 6px 0 0;
+}
+.fam-tree li:first-child::after {
+  border-radius: 6px 0 0 0;
+}
+
+/* Vertical drop from parent down to the sibling bar */
+.fam-tree ul::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  border-left: 1.5px solid var(--line-strong);
+  height: 1.25rem;
+}
+
+/* Root level: hide top connector since there's no parent above */
+.fam-tree > li::before,
+.fam-tree > li::after { display: none; }
+
+/* ── Family tree node card ───────────────────────────────────────── */
+.fam-node {
+  display: inline-block;
+  min-width: 180px;
+  max-width: 220px;
+  text-align: right;
+  padding: .65rem .75rem .55rem;
+  border-radius: 12px;
+  border: 1.5px solid var(--line-strong);
+  background: var(--surface);
+  cursor: pointer;
+  transition: transform .08s ease, box-shadow .15s ease, border-color .15s ease;
+  font-family: inherit;
+}
+.fam-node:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-2);
+}
+.fam-node:active { transform: translateY(0); }
+
+.fam-relation {
+  display: inline-block;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(15,23,42,.6);
+}
+.fam-duty {
+  font-size: .65rem;
+  font-weight: 700;
+  color: #B45309;
+  background: #FEF3C7;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+.fam-name {
+  margin-top: .25rem;
+  font-weight: 800;
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+.fam-meta {
+  margin-top: .15rem;
+  font-size: .7rem;
+  color: var(--muted);
+  letter-spacing: 0;
+  text-align: left;
+  direction: ltr;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-start;
+}
+.fam-father {
+  margin-top: .2rem;
+  font-size: .85rem;
+  line-height: 1.6;
+  color: rgba(15,23,42,.75);
+}
+.fam-pill {
+  display: inline-block;
+  margin-top: .45rem;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+/* Mobile: tighten and let the chart scroll horizontally */
+@media (max-width: 640px) {
+  .fam-node { min-width: 160px; max-width: 180px; }
+  .fam-tree li { padding: 1rem .25rem 0; }
+}
+
+/* ── Couple block (head + spouse rendered side by side) ─────────────── */
+.fam-couple {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  position: relative;
+}
+.fam-couple-link {
+  font-size: 1.15rem;
+  color: #DC2626;
+  filter: drop-shadow(0 1px 1px rgba(220,38,38,.25));
+  user-select: none;
+  padding: 0 .15rem;
+  line-height: 1;
+}
+@media (max-width: 640px) {
+  .fam-couple { flex-direction: column; gap: .25rem; }
+  .fam-couple-link { transform: rotate(90deg); }
 }

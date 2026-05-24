@@ -3,6 +3,7 @@
 import { signIn } from 'next-auth/react';
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Image from 'next/image';
 
 function LoginForm() {
   const router = useRouter();
@@ -31,40 +32,52 @@ function LoginForm() {
             setError('Invalid credentials.');
           }
         }}
-        className="panel w-full max-w-md p-6"
+        className="login-card relative z-10 w-full max-w-md"
         dir="ltr"
       >
-        <h1 className="text-2xl font-black text-slate-900">Campaign Staff Login</h1>
-        <p className="mt-1 text-sm text-slate-500">Authorized access only.</p>
+        <div className="relative z-10 flex items-center gap-3">
+          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-white/10 p-1 ring-1 ring-white/15">
+            <Image src="/favicon.svg" alt="Smart Nigraan" fill sizes="48px" className="object-contain" priority />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-amber-200/80">Smart Nigraan</p>
+            <h1>Campaign Staff Login</h1>
+          </div>
+        </div>
+        <p className="relative z-10 mt-2 text-sm text-slate-200/80">Authorized access only.</p>
 
-        <label className="mt-5 block text-sm font-semibold text-slate-700">Username</label>
+        <label className="relative z-10 mt-5 block text-sm font-semibold">Username</label>
         <input
           value={username}
           onChange={(event) => setUsername(event.target.value)}
-          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-900"
+          className="relative z-10 mt-1 w-full rounded-xl px-3 py-2 outline-none"
           autoComplete="username"
           required
         />
 
-        <label className="mt-4 block text-sm font-semibold text-slate-700">Password</label>
+        <label className="relative z-10 mt-4 block text-sm font-semibold">Password</label>
         <input
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-900"
+          className="relative z-10 mt-1 w-full rounded-xl px-3 py-2 outline-none"
           autoComplete="current-password"
           required
         />
 
-        {error ? <p className="mt-3 text-sm font-semibold text-rose-600">{error}</p> : null}
+        {error ? <p className="relative z-10 mt-3 text-sm font-semibold text-rose-300">{error}</p> : null}
 
         <button
           type="submit"
           disabled={loading}
-          className="mt-6 w-full rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white disabled:opacity-60"
+          className="relative z-10 mt-6 w-full rounded-xl bg-amber-400 px-4 py-3 font-bold text-slate-900 shadow-lg shadow-amber-500/20 transition hover:bg-amber-300 disabled:opacity-60"
         >
           {loading ? 'Signing in…' : 'Sign in'}
         </button>
+
+        <p className="relative z-10 mt-5 text-[11px] uppercase tracking-[0.2em] text-slate-300/60">
+          Secure Electoral Intelligence Platform
+        </p>
       </form>
   );
 }

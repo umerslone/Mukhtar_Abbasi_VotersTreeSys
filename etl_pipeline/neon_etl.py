@@ -187,8 +187,8 @@ def insert_rows(connection: "psycopg2.extensions.connection", rows: Iterable[dic
             INSERT INTO "Voter" (
                 id, block_code, serial_no, name, father_husband_name, cnic,
                 profession, age, address, inferred_family_id, gender,
-                voter_status, is_on_duty
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                voter_status, is_on_duty, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
             ON CONFLICT (id) DO UPDATE SET
                 block_code = EXCLUDED.block_code,
                 serial_no = EXCLUDED.serial_no,
@@ -199,7 +199,8 @@ def insert_rows(connection: "psycopg2.extensions.connection", rows: Iterable[dic
                 age = EXCLUDED.age,
                 address = EXCLUDED.address,
                 inferred_family_id = EXCLUDED.inferred_family_id,
-                gender = EXCLUDED.gender
+                gender = EXCLUDED.gender,
+                updated_at = NOW()
             """,
             payload,
             page_size=500,

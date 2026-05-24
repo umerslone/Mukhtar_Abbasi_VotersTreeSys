@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240" width="200" height="240" role="img">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0b2e4f"/>
+      <stop offset="100%" style="stop-color:#0d4f3c"/>
+    </linearGradient>
+    <linearGradient id="shield_fill" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff"/>
+      <stop offset="100%" style="stop-color:#e2e8f0"/>
+    </linearGradient>
+    <linearGradient id="check_g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#22c55e"/>
+      <stop offset="100%" style="stop-color:#15803d"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="200" height="240" rx="36" fill="url(#bg)"/>
+  <g transform="translate(4,12)">
+    <path d="M96 4 L168 38 L168 120 C168 162 136 196 96 212 C56 196 24 162 24 120 L24 38 Z" fill="url(#shield_fill)"/>
+    <rect x="52" y="58" width="88" height="74" rx="8" fill="#0b2e4f"/>
+    <polyline points="68,97 86,116 126,72" fill="none" stroke="url(#check_g)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M60,166 A36,36 0 0,1 132,166" fill="none" stroke="#f59e0b" stroke-width="7" stroke-linecap="round"/>
+    <line x1="96" y1="145" x2="96" y2="132" stroke="#f59e0b" stroke-width="6" stroke-linecap="round"/>
+    <line x1="72"  y1="152" x2="66"  y2="141" stroke="#f59e0b" stroke-width="5" stroke-linecap="round"/>
+    <line x1="120" y1="152" x2="126" y2="141" stroke="#f59e0b" stroke-width="5" stroke-linecap="round"/>
+  </g>
+</svg>

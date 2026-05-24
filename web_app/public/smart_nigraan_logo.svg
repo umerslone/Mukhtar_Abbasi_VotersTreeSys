@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 240" width="880" height="240" role="img">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0b2e4f"/>
+      <stop offset="100%" style="stop-color:#0d4f3c"/>
+    </linearGradient>
+    <linearGradient id="shield_fill" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#e2e8f0;stop-opacity:1"/>
+    </linearGradient>
+    <linearGradient id="check_g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#22c55e"/>
+      <stop offset="100%" style="stop-color:#15803d"/>
+    </linearGradient>
+    <filter id="drop" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="7" flood-color="#001427" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Background pill -->
+  <rect x="0" y="0" width="880" height="240" rx="20" fill="url(#bg)"/>
+
+  <!-- Shield body -->
+  <g filter="url(#drop)" transform="translate(28,24)">
+    <path d="M96 4 L168 38 L168 120 C168 162 136 196 96 212 C56 196 24 162 24 120 L24 38 Z"
+          fill="url(#shield_fill)"/>
+    <!-- Inner dark rectangle (ballot) -->
+    <rect x="52" y="58" width="88" height="74" rx="8" fill="#0b2e4f"/>
+    <!-- Checkmark -->
+    <polyline points="68,97 86,116 126,72"
+              fill="none" stroke="url(#check_g)" stroke-width="13"
+              stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Small sunrise arc at bottom of shield -->
+    <path d="M60,166 A36,36 0 0,1 132,166" fill="none" stroke="#f59e0b" stroke-width="7" stroke-linecap="round"/>
+    <line x1="96" y1="145" x2="96" y2="132" stroke="#f59e0b" stroke-width="6" stroke-linecap="round"/>
+    <line x1="72"  y1="152" x2="66"  y2="141" stroke="#f59e0b" stroke-width="5" stroke-linecap="round"/>
+    <line x1="120" y1="152" x2="126" y2="141" stroke="#f59e0b" stroke-width="5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Text block -->
+  <text x="232" y="82"  font-family="Segoe UI,Arial,sans-serif" font-size="54" font-weight="800" fill="#ffffff" letter-spacing="0.5">Smart Nigraan</text>
+  <text x="232" y="146" font-family="Segoe UI,Arial,sans-serif" font-size="46" font-weight="700" fill="#86efac">Voter Builder</text>
+  <!-- Tagline -->
+  <rect x="232" y="164" width="560" height="2" fill="#93c5fd" opacity="0.5"/>
+  <text x="234" y="198" font-family="Segoe UI,Arial,sans-serif" font-size="22" font-weight="400" fill="#cbd5e1">Secure Electoral Intelligence Platform  |  Nigraan Voter System</text>
+</svg>

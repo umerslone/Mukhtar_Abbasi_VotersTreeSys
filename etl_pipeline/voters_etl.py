@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sqlite3
+import time
 import uuid
 from collections import defaultdict
 from dataclasses import dataclass
@@ -312,15 +313,9 @@ def extract_rows_from_tables(tables: list[dict[str, Any]]) -> list[RawVoterRow]:
     return rows
 
 
-def ai_cleanup_rows(rows: list[RawVoterRow]) -> list[dict[str, Any]]:
-    if not rows:
-        return []
-
-    client = load_openai_client()
+def _ai_cleanup_batch(client: Any, batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
     system_prompt = "You are an Urdu OCR corrector. Fix broken characters in these names. Output strict JSON matching the DB schema."
-    payload = [row.__dict__ for row in rows]
-
-    response = client.chat.completions.create(
+    response = client.with_options(timeout=120.0).chat.completions.create(
         model=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
         temperature=0,
         response_format={"type": "json_object"},
@@ -330,7 +325,7 @@ def ai_cleanup_rows(rows: list[RawVoterRow]) -> list[dict[str, Any]]:
                 "role": "user",
                 "content": json.dumps(
                     {
-                        "rows": payload,
+                        "rows": batch,
                         "schema": {
                             "block_code": "string",
                             "serial_no": "string",
@@ -347,14 +342,47 @@ def ai_cleanup_rows(rows: list[RawVoterRow]) -> list[dict[str, Any]]:
             }
         ]
     )
-
     content = response.choices[0].message.content or "{}"
     parsed = json.loads(content)
-    cleaned_rows = parsed.get("rows", parsed if isinstance(parsed, list) else [])
-    if not isinstance(cleaned_rows, list):
+    cleaned = parsed.get("rows", parsed if isinstance(parsed, list) else [])
+    if not isinstance(cleaned, list):
         raise ValueError("Azure OpenAI cleanup did not return a JSON array under rows.")
+    return cleaned
 
-    return cleaned_rows
+
+def ai_cleanup_rows(rows: list[RawVoterRow]) -> list[dict[str, Any]]:
+    if not rows:
+        return []
+
+    client = load_openai_client()
+    payload = [row.__dict__ for row in rows]
+    batch_size = int(os.getenv("AI_CLEANUP_BATCH_SIZE", "120"))
+    cleaned_all: list[dict[str, Any]] = []
+    total = len(payload)
+    for start in range(0, total, batch_size):
+        batch = payload[start:start + batch_size]
+        end = min(start + batch_size, total)
+        print(f"[AI cleanup] batch {start + 1}-{end} of {total}...", flush=True)
+        attempt = 0
+        max_attempts = 3
+        while True:
+            attempt += 1
+            try:
+                cleaned_all.extend(_ai_cleanup_batch(client, batch))
+                break
+            except (json.JSONDecodeError, ValueError) as exc:
+                print(f"[AI cleanup] batch parse failed ({exc}); using raw rows for this batch.", flush=True)
+                cleaned_all.extend(batch)
+                break
+            except Exception as exc:
+                if attempt >= max_attempts:
+                    print(f"[AI cleanup] batch failed after {attempt} attempts ({exc}); using raw rows.", flush=True)
+                    cleaned_all.extend(batch)
+                    break
+                wait = 5 * attempt
+                print(f"[AI cleanup] batch error (attempt {attempt}): {exc}; retrying in {wait}s...", flush=True)
+                time.sleep(wait)
+    return cleaned_all
 
 
 def cnic_gender(cnic: str) -> str:
@@ -425,8 +453,22 @@ def infer_family_ids(rows: list[dict[str, Any]]) -> list[CleanVoterRow]:
 
 
 def build_rows_from_source(source_path: Path) -> list[dict[str, Any]]:
-    tables = extract_layout_tables(source_path)
-    raw_rows = extract_rows_from_tables(tables)
+    cache_path = source_path.with_suffix(source_path.suffix + ".raw_rows.json")
+    if cache_path.exists():
+        print(f"[cache] reusing OCR rows from {cache_path.name}", flush=True)
+        cached = json.loads(cache_path.read_text(encoding="utf-8"))
+        raw_rows = [RawVoterRow(**row) for row in cached]
+    else:
+        tables = extract_layout_tables(source_path)
+        raw_rows = extract_rows_from_tables(tables)
+        try:
+            cache_path.write_text(
+                json.dumps([row.__dict__ for row in raw_rows], ensure_ascii=False),
+                encoding="utf-8"
+            )
+            print(f"[cache] saved {len(raw_rows)} OCR rows to {cache_path.name}", flush=True)
+        except OSError as exc:
+            print(f"[cache] could not save OCR cache: {exc}", flush=True)
     cleaned_rows = ai_cleanup_rows(raw_rows)
     for row in cleaned_rows:
         row.setdefault("voter_status", "Unsurveyed")

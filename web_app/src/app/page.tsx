@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -48,41 +49,90 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const query = (params.q ?? '').trim();
   const status = statusFilter(params.status);
 
-  const voters = await prisma.voter.findMany({
-    where: {
-      AND: [
-        status ? { voter_status: status } : {},
-        query
-          ? {
-              OR: [
-                { cnic: { contains: query, mode: 'insensitive' } },
-                { name: { contains: query, mode: 'insensitive' } }
-              ]
-            }
-          : {}
-      ]
-    },
-    orderBy: [{ block_code: 'asc' }, { address: 'asc' }, { serial_no: 'asc' }],
-    take: 5000
-  });
+  // ── Two-pass load so a CNIC/name search returns the WHOLE inferred family,
+  //    not just the matched voter row. (Family Lookup parity.)
+  let voters;
+  if (query) {
+    const matched = await prisma.voter.findMany({
+      where: {
+        OR: [
+          { cnic: { contains: query, mode: 'insensitive' } },
+          { name: { contains: query, mode: 'insensitive' } }
+        ]
+      },
+      select: { inferred_family_id: true },
+      take: 500
+    });
+    const familyIds = Array.from(new Set(matched.map((m) => m.inferred_family_id)));
+    voters = familyIds.length
+      ? await prisma.voter.findMany({
+          where: {
+            AND: [
+              status ? { voter_status: status } : {},
+              { inferred_family_id: { in: familyIds } }
+            ]
+          },
+          orderBy: [{ block_code: 'asc' }, { address: 'asc' }, { serial_no: 'asc' }],
+          take: 5000
+        })
+      : [];
+  } else {
+    voters = await prisma.voter.findMany({
+      where: status ? { voter_status: status } : {},
+      orderBy: [{ block_code: 'asc' }, { address: 'asc' }, { serial_no: 'asc' }],
+      take: 5000
+    });
+  }
 
   const families = buildFamilies(voters as VoterRow[]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 p-5">
-      <header className="panel flex flex-col gap-3 p-5 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.32em] text-slate-500">Voter Management SaaS</p>
-          <h1 className="mt-1 text-3xl font-black text-slate-900">Family Tree Tagging</h1>
-          <p className="mt-1 text-sm text-slate-500">{voters.length} voters across {families.length} families</p>
+      <header className="brand-header flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-4">
+          <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-white/10 p-1 ring-1 ring-white/15">
+            <Image
+              src="/favicon.svg"
+              alt="Smart Nigraan shield"
+              fill
+              sizes="56px"
+              className="object-contain"
+              priority
+            />
+          </div>
+          <div>
+            <p className="eyebrow">Smart Nigraan · Voter Builder</p>
+            <h1 className="mt-1 text-3xl font-black tracking-tight">Family Tree Tagging</h1>
+            <p className="mt-1 text-sm text-slate-200/80">
+              {voters.length} voters across {families.length} families
+            </p>
+            <ul className="mt-3 flex flex-wrap gap-1.5" dir="ltr">
+              {[
+                { k: 'Halqa', v: 'LA-28 Lachraat' },
+                { k: 'Tehsil', v: 'Muzaffarabad' },
+                { k: 'UC', v: 'Chattar Domel' },
+                { k: 'Ward', v: 'Majhoi' },
+                { k: 'Area', v: 'Garhi Dhopatta' }
+              ].map((scope) => (
+                <li
+                  key={scope.k}
+                  className="snvb-badge bg-white/10 text-slate-100 ring-1 ring-white/15"
+                >
+                  <span className="text-amber-300/90">{scope.k}</span>
+                  <span className="mx-1 opacity-40">·</span>
+                  <span className="font-semibold">{scope.v}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
-        <nav className="flex flex-wrap gap-2 text-sm font-semibold">
-          <Link href="/" className="rounded-full bg-slate-900 px-4 py-2 text-white">Dashboard</Link>
-          <Link href="/blocks" className="rounded-full border border-slate-300 px-4 py-2 text-slate-700">Ward / PS</Link>
-          <Link href="/ingest" className="rounded-full border border-slate-300 px-4 py-2 text-slate-700">Ingest</Link>
-          <Link href="/duty-staff" className="rounded-full border border-slate-300 px-4 py-2 text-slate-700">Duty Staff</Link>
-          <Link href="/exports" className="rounded-full border border-slate-300 px-4 py-2 text-slate-700">Exports</Link>
-          <Link href="/api/auth/signout" className="rounded-full border border-slate-300 px-4 py-2 text-slate-700">Sign out</Link>
+        <nav className="flex flex-wrap gap-2">
+          <Link href="/" className="nav-pill nav-pill--primary">Dashboard</Link>
+          <Link href="/blocks" className="nav-pill nav-pill--ghost">Ward / PS</Link>
+          <Link href="/ingest" className="nav-pill nav-pill--ghost">Ingest</Link>
+          <Link href="/duty-staff" className="nav-pill nav-pill--ghost">Duty Staff</Link>
+          <Link href="/exports" className="nav-pill nav-pill--ghost">Exports</Link>
+          <Link href="/api/auth/signout" className="nav-pill nav-pill--ghost">Sign out</Link>
         </nav>
       </header>
 
