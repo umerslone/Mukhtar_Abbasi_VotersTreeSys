@@ -34,3 +34,21 @@ model Voter {
   @@index([name])
   @@index([source_batch])
 }
+
+/// Manual override of an inferred family relationship.
+/// `decision = "confirmed"` locks an edge the operator vouched for;
+/// `decision = "rejected"` hides a false-positive member from the ego's tree.
+/// Records are scoped per (ego, member) pair so the same member can be
+/// shown for one relative and hidden for another.
+model FamilyOverride {
+  id             String   @id @default(cuid())
+  ego_voter_id   String
+  member_voter_id String
+  decision       String   // "confirmed" | "rejected"
+  relation_hint  String?  // optional: parent | sibling | child | grandchild | other
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@unique([ego_voter_id, member_voter_id])
+  @@index([ego_voter_id])
+}

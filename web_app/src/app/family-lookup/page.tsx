@@ -17,6 +17,10 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { FamilyTree } from '@/components/FamilyTree';
 import { FamilyLookupTabs } from '@/components/FamilyLookupTabs';
+import {
+  FamilyOverridesEditor,
+  VoterNameEditor,
+} from '@/components/FamilyLookupEditors';
 import { nameSimilarity, normalizeName } from '@/lib/urdu_alphabet';
 import type { FamilyGroup, VoterRow } from '@/lib/types';
 
@@ -255,24 +259,65 @@ export default async function FamilyLookupPage({
 
   // Load the full inferred family for ego.
   let familyMembers: VoterRow[] = [];
+  let overrides: Record<string, 'confirmed' | 'rejected'> = {};
   if (ego) {
     familyMembers = (await prisma.voter.findMany({
       where: { inferred_family_id: ego.inferred_family_id },
       orderBy: [{ block_code: 'asc' }, { serial_no: 'asc' }],
       take: 200,
     })) as VoterRow[];
+
+    const ovs = await prisma.familyOverride.findMany({
+      where: { ego_voter_id: ego.id },
+      select: { member_voter_id: true, decision: true },
+    });
+    overrides = Object.fromEntries(
+      ovs.map((o) => [o.member_voter_id, o.decision as 'confirmed' | 'rejected']),
+    );
   }
+
+  // Apply rejections: drop rejected members from BOTH the tree-view family
+  // group and the bucket computation so the operator sees a clean view.
+  const rejectedIds = new Set(
+    Object.entries(overrides)
+      .filter(([, d]) => d === 'rejected')
+      .map(([id]) => id),
+  );
+  const visibleMembers = ego
+    ? familyMembers.filter((m) => m.id === ego.id || !rejectedIds.has(m.id))
+    : familyMembers;
 
   const familyGroup: FamilyGroup | null = ego
     ? {
         inferred_family_id: ego.inferred_family_id,
         block_code: ego.block_code,
         address: ego.address,
-        members: familyMembers,
+        members: visibleMembers,
       }
     : null;
 
-  const buckets = ego ? bucketFamily(ego, familyMembers) : null;
+  const buckets = ego ? bucketFamily(ego, visibleMembers) : null;
+
+  // Flat list of inferred members for the confirm/reject editor + count of
+  // siblings sharing the ego's exact OLD father-name string (for cascade UI).
+  const inferredList = ego && buckets
+    ? [
+        ...buckets.parents.map((v) => ({ voter: v, relation: 'parent' })),
+        ...buckets.unclesAunts.map((v) => ({ voter: v, relation: 'uncle/aunt' })),
+        ...buckets.siblings.map((v) => ({ voter: v, relation: 'sibling' })),
+        ...buckets.children.map((v) => ({ voter: v, relation: 'child' })),
+        ...buckets.grandchildren.map((v) => ({ voter: v, relation: 'grandchild' })),
+        ...buckets.others.map((v) => ({ voter: v, relation: 'other' })),
+      ]
+    : [];
+  const siblingsSharingFatherName = ego
+    ? familyMembers.filter(
+        (m) =>
+          m.id !== ego.id &&
+          m.father_husband_name.trim() === ego.father_husband_name.trim() &&
+          ego.father_husband_name.trim().length > 0,
+      ).length
+    : 0;
 
   // ── Page chrome ─────────────────────────────────────────────────────
   return (
@@ -379,11 +424,12 @@ export default async function FamilyLookupPage({
       {/* Ego identity card + tree/list */}
       {ego && familyGroup && buckets ? (
         <>
-          <EgoCard ego={ego} memberCount={familyMembers.length} />
+          <EgoCard ego={ego} memberCount={visibleMembers.length} />
+          <VoterNameEditor voter={ego} siblingsSharingFatherName={siblingsSharingFatherName} />
           <SummaryChips ego={ego} buckets={buckets} />
           <FamilyLookupTabs
             tree={
-              familyMembers.length === 0 ? (
+              visibleMembers.length <= 1 ? (
                 <div className="panel p-6 text-center text-slate-600">
                   <p className="text-sm">
                     🌱 <b>No other relatives inferred for this voter.</b> The OCR pass found
@@ -411,6 +457,13 @@ export default async function FamilyLookupPage({
               </div>
             }
           />
+          {inferredList.length > 0 ? (
+            <FamilyOverridesEditor
+              egoId={ego.id}
+              members={inferredList}
+              overrides={overrides}
+            />
+          ) : null}
         </>
       ) : null}
     </div>
