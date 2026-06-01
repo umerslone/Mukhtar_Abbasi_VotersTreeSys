@@ -264,22 +264,23 @@ function TreeCard({
   );
 }
 
-function Subtree({ node, isEgo, activeMaleNames, onSelect }: Readonly<{ node: TreeNode; isEgo?: boolean; activeMaleNames: string[]; onSelect: (v: VoterRow) => void }>) {
+function Subtree({ node, isEgo, egoId, activeMaleNames, onSelect }: Readonly<{ node: TreeNode; isEgo?: boolean; egoId?: string; activeMaleNames: string[]; onSelect: (v: VoterRow) => void }>) {
+  const highlightThis = egoId ? node.voter.id === egoId : Boolean(isEgo);
   return (
     <li>
       {node.spouse ? (
         <div className="fam-couple">
-          <TreeCard voter={node.voter} relation={node.relation} isEgo={isEgo} activeMaleNames={activeMaleNames} onSelect={onSelect} />
+          <TreeCard voter={node.voter} relation={node.relation} isEgo={highlightThis} activeMaleNames={activeMaleNames} onSelect={onSelect} />
           <span className="fam-couple-link" aria-hidden="true">♥</span>
-          <TreeCard voter={node.spouse} relation="spouse" activeMaleNames={activeMaleNames} onSelect={onSelect} />
+          <TreeCard voter={node.spouse} relation="spouse" isEgo={egoId === node.spouse.id} activeMaleNames={activeMaleNames} onSelect={onSelect} />
         </div>
       ) : (
-        <TreeCard voter={node.voter} relation={node.relation} isEgo={isEgo} activeMaleNames={activeMaleNames} onSelect={onSelect} />
+        <TreeCard voter={node.voter} relation={node.relation} isEgo={highlightThis} activeMaleNames={activeMaleNames} onSelect={onSelect} />
       )}
       {node.children.length > 0 ? (
         <ul>
           {node.children.map((child) => (
-            <Subtree key={child.voter.id} node={child} activeMaleNames={activeMaleNames} onSelect={onSelect} />
+            <Subtree key={child.voter.id} node={child} egoId={egoId} activeMaleNames={activeMaleNames} onSelect={onSelect} />
           ))}
         </ul>
       ) : null}
@@ -316,7 +317,7 @@ function computeInfluence(members: VoterRow[]): Influence {
 
 // ── Top-level component ────────────────────────────────────────────────
 
-export function FamilyTree({ families }: Readonly<{ families: FamilyGroup[] }>) {
+export function FamilyTree({ families, egoId }: Readonly<{ families: FamilyGroup[]; egoId?: string }>) {
   const [selected, setSelected] = useState<VoterRow | null>(null);
 
   if (!families.length) {
@@ -359,7 +360,7 @@ export function FamilyTree({ families }: Readonly<{ families: FamilyGroup[] }>) 
             <div className="fam-tree-scroll">
               <ul className="fam-tree">
                 {roots.map((root, idx) => (
-                  <Subtree key={root.voter.id} node={root} isEgo={idx === 0} activeMaleNames={activeMaleNames} onSelect={setSelected} />
+                  <Subtree key={root.voter.id} node={root} isEgo={!egoId && idx === 0} egoId={egoId} activeMaleNames={activeMaleNames} onSelect={setSelected} />
                 ))}
               </ul>
             </div>

@@ -128,6 +128,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </div>
         <nav className="flex flex-wrap gap-2">
           <Link href="/" className="nav-pill nav-pill--primary">Dashboard</Link>
+          <Link href="/family-lookup" className="nav-pill nav-pill--ghost">Family Lookup</Link>
           <Link href="/blocks" className="nav-pill nav-pill--ghost">Ward / PS</Link>
           <Link href="/ingest" className="nav-pill nav-pill--ghost">Ingest</Link>
           <Link href="/duty-staff" className="nav-pill nav-pill--ghost">Duty Staff</Link>
