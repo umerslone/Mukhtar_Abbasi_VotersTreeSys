@@ -33,6 +33,7 @@ export default function IngestPage() {
   // ── PDF/Image OCR (Python microservice) ─────────────────────────
   const [ocrFile, setOcrFile] = useState<File | null>(null);
   const [ocrBatch, setOcrBatch] = useState('');
+  const [ocrEngine, setOcrEngine] = useState<'azure' | 'paddle'>('azure');
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
   const [ocrError, setOcrError] = useState<string | null>(null);
@@ -48,7 +49,7 @@ export default function IngestPage() {
     setOcrBusy(true);
     const fd = new FormData();
     fd.append('file', ocrFile);
-    const qs = new URLSearchParams({ ingest: '1' });
+    const qs = new URLSearchParams({ ingest: '1', engine: ocrEngine });
     if (ocrBatch.trim()) qs.set('batch', ocrBatch.trim());
     try {
       const res = await fetch(`/api/ocr-extract?${qs.toString()}`, { method: 'POST', body: fd });
@@ -170,11 +171,25 @@ export default function IngestPage() {
         <div>
           <h2 className="text-lg font-bold text-slate-900">Or upload a scanned PDF / image</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Runs Azure Document Intelligence directly from this server, then ingests the
-            extracted voters into the database in one step — no local Python required.
+            Picks an OCR engine, then ingests the extracted voters into the database in one step.
           </p>
-          <p className="mt-1 text-xs text-slate-500">
-            Requires <code className="rounded bg-slate-100 px-1.5 py-0.5">AZURE_DOCUMENT_INTELLIGENCE_*</code> env vars (already set if your existing Azure OCR pipeline works).
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-slate-700">OCR engine</label>
+          <div className="mt-2 flex flex-wrap gap-2 text-sm">
+            <label className={`cursor-pointer rounded-full border px-4 py-2 ${ocrEngine === 'azure' ? 'border-indigo-700 bg-indigo-50 font-semibold text-indigo-800' : 'border-slate-300 text-slate-700'}`}>
+              <input type="radio" name="engine" value="azure" checked={ocrEngine === 'azure'} onChange={() => setOcrEngine('azure')} className="sr-only" />
+              Azure Document Intelligence
+            </label>
+            <label className={`cursor-pointer rounded-full border px-4 py-2 ${ocrEngine === 'paddle' ? 'border-indigo-700 bg-indigo-50 font-semibold text-indigo-800' : 'border-slate-300 text-slate-700'}`}>
+              <input type="radio" name="engine" value="paddle" checked={ocrEngine === 'paddle'} onChange={() => setOcrEngine('paddle')} className="sr-only" />
+              PaddleOCR (self-hosted)
+            </label>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            <b>Azure</b>: cloud, paid per page, runs anywhere (uses <code className="rounded bg-slate-100 px-1 py-0.5">AZURE_DOCUMENT_INTELLIGENCE_*</code>).<br />
+            <b>PaddleOCR</b>: free, self-hosted, requires the Flask service in <code className="rounded bg-slate-100 px-1 py-0.5">voter_ocr_service/</code> running and <code className="rounded bg-slate-100 px-1 py-0.5">OCR_SERVICE_URL</code> set.
           </p>
         </div>
 
@@ -205,7 +220,7 @@ export default function IngestPage() {
           disabled={ocrBusy || !ocrFile}
           className="rounded-full bg-indigo-700 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {ocrBusy ? 'Extracting (may take a minute)…' : 'Run OCR + Ingest'}
+          {ocrBusy ? `Extracting via ${ocrEngine}…` : `Run OCR + Ingest (${ocrEngine})`}
         </button>
       </form>
 
