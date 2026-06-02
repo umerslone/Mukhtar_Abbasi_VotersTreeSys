@@ -45,11 +45,19 @@ function kinshipPrefix(v: VoterRow): string {
   return isMale(v) ? 'والد' : 'والد/شوہر';
 }
 
+// Tighter threshold for sibling/grandchild edges where many household-blocks
+// share common given-names (شاہ، علی، حسین) — keeps Dice-bigram noise out.
+const STRICT_SIM = 0.75;
+
 /**
  * Dynamically discover ego's household by fuzzy-matching names within the
  * same polling-block, instead of relying on the stored `inferred_family_id`
  * (which the ETL only groups by exact (block_code, address) tuple — fragile
  * because OCR introduces small address-spelling variants).
+ *
+ * Strategy: only walk first-degree edges from ego, then one hop down to
+ * grandchildren. Never expand via parent.father_husband_name (uncles/aunts) —
+ * that produces a runaway cascade across the block.
  */
 async function discoverFamily(ego: VoterRow): Promise<VoterRow[]> {
   const pool = (await prisma.voter.findMany({
@@ -60,51 +68,64 @@ async function discoverFamily(ego: VoterRow): Promise<VoterRow[]> {
 
   const egoName = normalizeName(ego.name);
   const egoFather = normalizeName(ego.father_husband_name);
-  const parents = pool.filter(
-    (m) => m.id !== ego.id && egoFather && nameSimilarity(normalizeName(m.name), egoFather) >= PARENT_SIM,
-  );
+
+  // Parent: at most one in roll. Pick the single best name match to ego.father.
+  let parent: VoterRow | null = null;
+  if (egoFather) {
+    let bestSim = STRICT_SIM;
+    for (const m of pool) {
+      if (m.id === ego.id) continue;
+      const sim = nameSimilarity(normalizeName(m.name), egoFather);
+      if (sim >= bestSim) {
+        bestSim = sim;
+        parent = m;
+      }
+    }
+  }
+
+  // Siblings share ego's exact father string (use strict threshold to avoid
+  // catching everyone whose father shares a common given-name token).
   const siblings = pool.filter(
     (m) =>
       m.id !== ego.id &&
+      m.id !== parent?.id &&
       egoFather &&
-      nameSimilarity(normalizeName(m.father_husband_name), egoFather) >= PARENT_SIM,
+      nameSimilarity(normalizeName(m.father_husband_name), egoFather) >= STRICT_SIM,
   );
+
+  // Children: voters whose father string matches ego's name.
   const children = pool.filter(
     (m) =>
       m.id !== ego.id &&
+      m.id !== parent?.id &&
       egoName &&
       nameSimilarity(normalizeName(m.father_husband_name), egoName) >= PARENT_SIM,
   );
-  const childKeys = children.map((c) => normalizeName(c.name)).filter(Boolean);
   const childIds = new Set(children.map((c) => c.id));
+  const childKeys = children.map((c) => normalizeName(c.name)).filter((s) => s.length >= 4);
+
+  // Grandchildren: father matches a child's name (strict threshold + length
+  // guard so single-token children don't drag in unrelated voters).
   const grandchildren = pool.filter(
     (m) =>
       m.id !== ego.id &&
+      m.id !== parent?.id &&
       !childIds.has(m.id) &&
-      childKeys.some((ck) => nameSimilarity(normalizeName(m.father_husband_name), ck) >= PARENT_SIM),
+      childKeys.some((ck) => nameSimilarity(normalizeName(m.father_husband_name), ck) >= STRICT_SIM),
   );
-  const parentFatherKeys = parents.map((p) => normalizeName(p.father_husband_name)).filter(Boolean);
-  const parentIds = new Set(parents.map((p) => p.id));
-  const unclesAunts = pool.filter(
-    (m) =>
-      m.id !== ego.id &&
-      !parentIds.has(m.id) &&
-      parentFatherKeys.some(
-        (pf) => nameSimilarity(normalizeName(m.father_husband_name), pf) >= PARENT_SIM,
-      ),
-  );
-  // Spouses: opposite-gender voters in same block whose father_husband_name
-  // fuzzy-matches ego's name (or vice-versa) — already covered by parents/children
-  // logic since husband ≈ "father of children".
 
   const seen = new Set<string>([ego.id]);
   const out: VoterRow[] = [ego];
-  for (const v of [...parents, ...unclesAunts, ...siblings, ...children, ...grandchildren]) {
-    if (!seen.has(v.id)) {
+  const push = (v: VoterRow | null) => {
+    if (v && !seen.has(v.id)) {
       seen.add(v.id);
       out.push(v);
     }
-  }
+  };
+  push(parent);
+  siblings.forEach(push);
+  children.forEach(push);
+  grandchildren.forEach(push);
   return out;
 }
 
