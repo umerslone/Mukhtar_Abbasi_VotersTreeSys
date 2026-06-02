@@ -101,7 +101,7 @@ function findSpouse(head: VoterRow, candidates: VoterRow[], used: Set<string>): 
   return best;
 }
 
-type Relation = 'self' | 'spouse' | 'child' | 'grandchild' | 'member';
+type Relation = 'self' | 'spouse' | 'child' | 'grandchild' | 'sibling' | 'member';
 
 interface TreeNode {
   voter: VoterRow;
@@ -140,6 +140,24 @@ function buildTree(members: VoterRow[]): TreeNode[] {
   // The head has no parent. Spouses are resolved separately later.
   const parentOf = new Map<string, string | null>();
   parentOf.set(head.id, null);
+
+  // Members who share the head's father string but whose father isn't in the
+  // roll are *siblings of the head* (not children). Track them so the renderer
+  // can label them correctly even though structurally they hang under head.
+  const headFatherKey = fatherKey.get(head.id) ?? '';
+  const headFatherInRoll = headFatherKey
+    ? members.some((m) => m.id !== head.id && nameSimilarity(headFatherKey, nameKey.get(m.id) ?? '') >= PARENT_SIM)
+    : false;
+  const siblingIds = new Set<string>();
+  if (headFatherKey && !headFatherInRoll) {
+    for (const m of members) {
+      if (m.id === head.id) continue;
+      const fk = fatherKey.get(m.id) ?? '';
+      if (fk && nameSimilarity(fk, headFatherKey) >= PARENT_SIM) {
+        siblingIds.add(m.id);
+      }
+    }
+  }
 
   for (const m of members) {
     if (m.id === head.id) continue;
@@ -184,7 +202,11 @@ function buildTree(members: VoterRow[]): TreeNode[] {
     const kids = (childrenOf.get(voter.id) ?? [])
       .filter((c) => !used.has(c.id))
       .sort((a, b) => (b.age ?? 0) - (a.age ?? 0));
-    const children = kids.map((c) => buildNode(c, childRel));
+    const children = kids.map((c) => {
+      // Members who share head's father are siblings of head, not children.
+      const rel: Relation = relation === 'self' && siblingIds.has(c.id) ? 'sibling' : childRel;
+      return buildNode(c, rel);
+    });
 
     return { voter, spouse, relation, children };
   };
@@ -216,10 +238,10 @@ function palette(status: string): Palette {
 }
 
 const RELATION_EMOJI: Record<Relation, string> = {
-  self: '⭐', spouse: '💍', child: '🧒', grandchild: '👶', member: '•',
+  self: '⭐', spouse: '💍', child: '🧒', grandchild: '👶', sibling: '👬', member: '•',
 };
 const RELATION_LABEL: Record<Relation, string> = {
-  self: 'Head', spouse: 'Spouse', child: 'Child', grandchild: 'Grandchild', member: 'Member',
+  self: 'Head', spouse: 'Spouse', child: 'Child', grandchild: 'Grandchild', sibling: 'Sibling', member: 'Member',
 };
 
 // ── Node card ──────────────────────────────────────────────────────────
