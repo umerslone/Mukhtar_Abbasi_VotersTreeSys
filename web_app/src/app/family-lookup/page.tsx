@@ -48,6 +48,39 @@ function kinshipPrefix(v: VoterRow): string {
 // Tighter threshold for sibling/grandchild edges where many household-blocks
 // share common given-names (شاہ، علی، حسین) — keeps Dice-bigram noise out.
 const STRICT_SIM = 0.75;
+const TOKEN_SIM = 0.85;
+
+// Spouse-of markers OCR'd at the start of a female voter's father_husband_name.
+// "زوج"/"زوجہ"/"ونشر"/"ذوب" all read as variants of "spouse of" before the
+// actual husband name. Strip them so similarity doesn't include the noise token.
+const SPOUSE_MARKERS = /^(?:زوج(?:ہ|ۃ|ه)?|زوجة|ونشر|ذوب|ذوج|wife of|w\/o)\s+/iu;
+
+function cleanRelative(raw: string): string {
+  const n = normalizeName(raw || '');
+  return n.replace(SPOUSE_MARKERS, '').trim();
+}
+
+/**
+ * Stricter name-match for family edges: bigram-Dice on the full name AND
+ * on the LAST token (surname-ish). Both must clear thresholds — this is
+ * what excludes false matches like "عبد المجيد" vs "عبد الرشيد" (whole
+ * Dice ~0.67 but last-token Dice ~0.5).
+ */
+function nameMatch(a: string, b: string, fullThreshold = STRICT_SIM, tokenThreshold = TOKEN_SIM): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (nameSimilarity(a, b) < fullThreshold) return false;
+  const at = a.split(/\s+/).filter(Boolean);
+  const bt = b.split(/\s+/).filter(Boolean);
+  if (!at.length || !bt.length) return false;
+  const lastA = at[at.length - 1];
+  const lastB = bt[bt.length - 1];
+  // Last token must look like the same word (handles OCR ي/ی drift).
+  if (lastA.length < 3 || lastB.length < 3) {
+    return lastA === lastB;
+  }
+  return nameSimilarity(lastA, lastB) >= tokenThreshold;
+}
 
 /**
  * Dynamically discover ego's household by fuzzy-matching names within the
@@ -67,15 +100,17 @@ async function discoverFamily(ego: VoterRow): Promise<VoterRow[]> {
   })) as VoterRow[];
 
   const egoName = normalizeName(ego.name);
-  const egoFather = normalizeName(ego.father_husband_name);
+  const egoFather = cleanRelative(ego.father_husband_name);
 
   // Parent: at most one in roll. Pick the single best name match to ego.father.
   let parent: VoterRow | null = null;
   if (egoFather) {
-    let bestSim = STRICT_SIM;
+    let bestSim = TOKEN_SIM;
     for (const m of pool) {
       if (m.id === ego.id) continue;
-      const sim = nameSimilarity(normalizeName(m.name), egoFather);
+      const mn = normalizeName(m.name);
+      if (!nameMatch(mn, egoFather)) continue;
+      const sim = nameSimilarity(mn, egoFather);
       if (sim >= bestSim) {
         bestSim = sim;
         parent = m;
@@ -83,35 +118,33 @@ async function discoverFamily(ego: VoterRow): Promise<VoterRow[]> {
     }
   }
 
-  // Siblings share ego's exact father string (use strict threshold to avoid
-  // catching everyone whose father shares a common given-name token).
+  // Siblings share ego's father string (after stripping spouse-markers).
   const siblings = pool.filter(
     (m) =>
       m.id !== ego.id &&
       m.id !== parent?.id &&
       egoFather &&
-      nameSimilarity(normalizeName(m.father_husband_name), egoFather) >= STRICT_SIM,
+      nameMatch(cleanRelative(m.father_husband_name), egoFather),
   );
 
-  // Children: voters whose father string matches ego's name.
+  // Children: voters whose (cleaned) father string matches ego's name.
   const children = pool.filter(
     (m) =>
       m.id !== ego.id &&
       m.id !== parent?.id &&
       egoName &&
-      nameSimilarity(normalizeName(m.father_husband_name), egoName) >= PARENT_SIM,
+      nameMatch(cleanRelative(m.father_husband_name), egoName),
   );
   const childIds = new Set(children.map((c) => c.id));
   const childKeys = children.map((c) => normalizeName(c.name)).filter((s) => s.length >= 4);
 
-  // Grandchildren: father matches a child's name (strict threshold + length
-  // guard so single-token children don't drag in unrelated voters).
+  // Grandchildren: father matches a child's name.
   const grandchildren = pool.filter(
     (m) =>
       m.id !== ego.id &&
       m.id !== parent?.id &&
       !childIds.has(m.id) &&
-      childKeys.some((ck) => nameSimilarity(normalizeName(m.father_husband_name), ck) >= STRICT_SIM),
+      childKeys.some((ck) => nameMatch(cleanRelative(m.father_husband_name), ck)),
   );
 
   const seen = new Set<string>([ego.id]);
