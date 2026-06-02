@@ -36,14 +36,30 @@ export async function extractVotersViaPaddle(
   }
   const url = `${base.replace(/\/$/, '')}/extract-voters`;
 
+  // Read the whole file into memory before re-uploading. Passing the original
+  // File from request.formData() straight into a new fetch() body is fragile
+  // under Node/undici for large multipart bodies (frequent "fetch failed"
+  // mid-stream). Buffering once gives us a stable Content-Length-bounded body.
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const blob = new Blob([bytes], { type: file.type || 'application/octet-stream' });
   const fd = new FormData();
-  fd.append('file', file, file.name);
+  fd.append('file', blob, file.name);
+
+  // Generous timeout — Paddle can take 60-180 s on a fresh process for a big PDF.
+  const timeoutMs = Number(process.env.OCR_PADDLE_TIMEOUT_MS ?? 600_000);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
 
   let res: Response;
   try {
-    res = await fetch(url, { method: 'POST', body: fd });
+    res = await fetch(url, { method: 'POST', body: fd, signal: ctrl.signal });
   } catch (err) {
-    throw new Error(`PaddleOCR service unreachable: ${(err as Error).message}`);
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `PaddleOCR service unreachable at ${url} (${bytes.byteLength} bytes): ${detail}`,
+    );
+  } finally {
+    clearTimeout(timer);
   }
 
   const json = (await res.json().catch(() => null)) as PaddleResponse | null;
