@@ -26,8 +26,8 @@ import { extractVotersViaPaddle, paddleConfigured } from '@/lib/ocr_paddle';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-// Azure DI is async; allow up to 5 minutes for big PDFs (Pro / Fluid plans).
-export const maxDuration = 300;
+// Big PDFs can take 5-10 minutes through PaddleOCR; allow 15 min headroom.
+export const maxDuration = 900;
 
 // Hard cap on the uploaded file. Must stay <= experimental.proxyClientMaxBodySize
 // in next.config.mjs (currently 200 MB). Bump both together if you need more.

@@ -11,6 +11,11 @@
  */
 import type { IngestVoterRow } from '@/lib/ingest';
 import type { OcrExtractResult } from '@/lib/ocr_extract';
+// undici is bundled with Node and powers the global `fetch`. We import the
+// Agent directly so we can override its 300s headers/body timeouts — Paddle
+// can take 5+ minutes on a large PDF and the default fires before Paddle
+// returns, surfacing as a generic "fetch failed".
+import { Agent } from 'undici';
 
 export function paddleConfigured(): boolean {
   return Boolean(process.env.OCR_SERVICE_URL?.trim());
@@ -45,14 +50,28 @@ export async function extractVotersViaPaddle(
   const fd = new FormData();
   fd.append('file', blob, file.name);
 
-  // Generous timeout — Paddle can take 60-180 s on a fresh process for a big PDF.
-  const timeoutMs = Number(process.env.OCR_PADDLE_TIMEOUT_MS ?? 600_000);
+  // Generous timeout — Paddle can take 5-10 min on a fresh process for a big PDF.
+  // undici's default headers/body timeout is 300s, so we have to override the
+  // dispatcher; an AbortController alone is not enough.
+  const timeoutMs = Number(process.env.OCR_PADDLE_TIMEOUT_MS ?? 900_000);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const dispatcher = new Agent({
+    headersTimeout: timeoutMs,
+    bodyTimeout: timeoutMs,
+    keepAliveTimeout: timeoutMs,
+  });
 
   let res: Response;
   try {
-    res = await fetch(url, { method: 'POST', body: fd, signal: ctrl.signal });
+    res = await fetch(url, {
+      method: 'POST',
+      body: fd,
+      signal: ctrl.signal,
+      // `dispatcher` is a non-standard Node/undici extension to fetch().
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...({ dispatcher } as any),
+    });
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(
@@ -60,6 +79,7 @@ export async function extractVotersViaPaddle(
     );
   } finally {
     clearTimeout(timer);
+    dispatcher.close().catch(() => {});
   }
 
   const json = (await res.json().catch(() => null)) as PaddleResponse | null;
