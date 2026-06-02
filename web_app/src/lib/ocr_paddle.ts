@@ -66,7 +66,7 @@ async function postOneChunk(args: {
   label: string;
 }): Promise<ChunkResult> {
   const { url, bytes, filename, contentType, timeoutMs, label } = args;
-  const blob = new Blob([bytes], { type: contentType });
+  const blob = new Blob([bytes as BlobPart], { type: contentType });
   const fd = new FormData();
   fd.append('file', blob, filename);
 
