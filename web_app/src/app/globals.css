@@ -325,6 +325,15 @@ body {
   list-style: none;
 }
 
+/* Connector palette — each kinship gets a distinct stroke */
+.fam-tree {
+  --conn-child:     #475569;  /* slate-600 — direct parent→child */
+  --conn-grand:     #0E7490;  /* cyan-700 — grandchild branch */
+  --conn-sibling:   #B45309;  /* amber-700 — head↔sibling (dashed) */
+  --conn-spouse:    #DC2626;  /* red-600   — marital link */
+  --conn-width:     2.5px;
+}
+
 /* Horizontal sibling connector lines (top of each node) */
 .fam-tree li::before,
 .fam-tree li::after {
@@ -332,11 +341,27 @@ body {
   position: absolute;
   top: 0;
   height: 1.25rem;
-  border-top: 1.5px solid var(--line-strong);
+  border-top: var(--conn-width) solid var(--conn-child);
   width: 50%;
 }
 .fam-tree li::before { left: 0; }
-.fam-tree li::after  { left: 50%; border-left: 1.5px solid var(--line-strong); }
+.fam-tree li::after  { left: 50%; border-left: var(--conn-width) solid var(--conn-child); }
+
+/* Relation-coded connectors: pick stroke from the child node's data-rel */
+.fam-tree li[data-rel="grandchild"]::before,
+.fam-tree li[data-rel="grandchild"]::after {
+  border-top-color: var(--conn-grand);
+  border-left-color: var(--conn-grand);
+}
+.fam-tree li[data-rel="sibling"]::before,
+.fam-tree li[data-rel="sibling"]::after {
+  border-top-style: dashed;
+  border-left-style: dashed;
+  border-top-color: var(--conn-sibling);
+  border-left-color: var(--conn-sibling);
+}
+.fam-tree li[data-rel="grandchild"]:last-child::before,
+.fam-tree li[data-rel="sibling"]:last-child::before { border-right-color: inherit; }
 
 /* Only-child: no horizontal line, just the vertical drop */
 .fam-tree > li:only-child,
@@ -354,11 +379,18 @@ body {
 .fam-tree li:first-child::before,
 .fam-tree li:last-child::after { border: 0 none; }
 .fam-tree li:last-child::before {
-  border-right: 1.5px solid var(--line-strong);
-  border-radius: 0 6px 0 0;
+  border-right: var(--conn-width) solid var(--conn-child);
+  border-radius: 0 8px 0 0;
+}
+.fam-tree li[data-rel="grandchild"]:last-child::before {
+  border-right-color: var(--conn-grand);
+}
+.fam-tree li[data-rel="sibling"]:last-child::before {
+  border-right-color: var(--conn-sibling);
+  border-right-style: dashed;
 }
 .fam-tree li:first-child::after {
-  border-radius: 6px 0 0 0;
+  border-radius: 8px 0 0 0;
 }
 
 /* Vertical drop from parent down to the sibling bar */
@@ -367,7 +399,7 @@ body {
   position: absolute;
   top: 0;
   left: 50%;
-  border-left: 1.5px solid var(--line-strong);
+  border-left: var(--conn-width) solid var(--conn-child);
   height: 1.25rem;
 }
 
@@ -507,16 +539,25 @@ body {
 .fam-couple {
   display: inline-flex;
   align-items: center;
-  gap: .5rem;
+  gap: .35rem;
   position: relative;
+  padding: .4rem .6rem;
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(220,38,38,.05), rgba(220,38,38,.12), rgba(220,38,38,.05));
+  border: 1.5px dashed rgba(220,38,38,.45);
 }
 .fam-couple-link {
-  font-size: 1.15rem;
+  font-size: 1.6rem;
   color: #DC2626;
-  filter: drop-shadow(0 1px 1px rgba(220,38,38,.25));
+  filter: drop-shadow(0 1px 2px rgba(220,38,38,.45));
   user-select: none;
-  padding: 0 .15rem;
+  padding: 0 .25rem;
   line-height: 1;
+  animation: heartPulse 2.2s ease-in-out infinite;
+}
+@keyframes heartPulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.18); }
 }
 @media (max-width: 640px) {
   .fam-couple { flex-direction: column; gap: .25rem; }

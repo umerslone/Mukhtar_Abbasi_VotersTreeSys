@@ -289,11 +289,11 @@ function TreeCard({
 function Subtree({ node, isEgo, egoId, activeMaleNames, onSelect }: Readonly<{ node: TreeNode; isEgo?: boolean; egoId?: string; activeMaleNames: string[]; onSelect: (v: VoterRow) => void }>) {
   const highlightThis = egoId ? node.voter.id === egoId : Boolean(isEgo);
   return (
-    <li>
+    <li data-rel={node.relation}>
       {node.spouse ? (
-        <div className="fam-couple">
+        <div className="fam-couple" data-rel="spouse">
           <TreeCard voter={node.voter} relation={node.relation} isEgo={highlightThis} activeMaleNames={activeMaleNames} onSelect={onSelect} />
-          <span className="fam-couple-link" aria-hidden="true">♥</span>
+          <span className="fam-couple-link" aria-hidden="true" title="Married">💞</span>
           <TreeCard voter={node.spouse} relation="spouse" isEgo={egoId === node.spouse.id} activeMaleNames={activeMaleNames} onSelect={onSelect} />
         </div>
       ) : (
