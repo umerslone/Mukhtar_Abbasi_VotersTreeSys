@@ -175,7 +175,7 @@ sudo -u "$DEPLOY_USER" bash -lc "
 
   pm2 describe voters-ocr >/dev/null 2>&1 \
     && pm2 reload voters-ocr --update-env \
-    || pm2 start '.venv/bin/waitress-serve --listen=127.0.0.1:5005 app:app' \
+    || pm2 start '.venv/bin/waitress-serve --threads=1 --listen=127.0.0.1:5005 app:app' \
          --name voters-ocr --cwd '$APP_DIR/voter_ocr_service'
 
   pm2 save

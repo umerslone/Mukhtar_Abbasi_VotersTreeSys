@@ -53,9 +53,13 @@ def get_table_engine() -> Any:
             from paddleocr import PPStructure
 
             log.info("Loading PPStructure (table layout)")
+            # NOTE: PPStructure layout models only support 'en' / 'ch'.
+            # The actual text recognition inside detected cells uses the
+            # main PaddleOCR engine which is correctly configured for
+            # OCR_LANG (e.g. arabic / urdu).
             _table_engine = PPStructure(
                 show_log=False,
-                lang=OCR_LANG,
+                lang='en',
                 use_gpu=OCR_USE_GPU,
                 ocr=True,
                 layout=True,
