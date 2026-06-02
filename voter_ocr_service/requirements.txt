@@ -28,3 +28,8 @@ rapidfuzz==3.9.7
 # Utilities
 python-dotenv==1.0.1
 werkzeug==3.0.4
+
+# Build deps required at runtime by paddle.utils.cpp_extension
+# (Python 3.12 venvs no longer ship setuptools by default).
+setuptools>=70
+wheel>=0.43
