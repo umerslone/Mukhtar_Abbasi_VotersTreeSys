@@ -22,8 +22,13 @@ export async function POST(request: Request) {
   let form: FormData;
   try {
     form = await request.formData();
-  } catch {
-    return NextResponse.json({ error: 'Could not parse upload' }, { status: 400 });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error('[ingest] formData() failed:', detail);
+    return NextResponse.json(
+      { error: `Could not parse upload: ${detail}` },
+      { status: 400 },
+    );
   }
 
   const file = form.get('file');

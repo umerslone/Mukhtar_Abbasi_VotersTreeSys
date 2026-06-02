@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 interface IngestResult {
@@ -37,6 +37,18 @@ export default function IngestPage() {
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
   const [ocrError, setOcrError] = useState<string | null>(null);
+  const [ocrElapsed, setOcrElapsed] = useState(0);
+  const [ocrPhase, setOcrPhase] = useState<'idle' | 'uploading' | 'processing'>('idle');
+
+  useEffect(() => {
+    if (!ocrBusy) return;
+    const start = Date.now();
+    setOcrElapsed(0);
+    const id = window.setInterval(() => {
+      setOcrElapsed(Math.round((Date.now() - start) / 1000));
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [ocrBusy]);
 
   async function submitOcr(e: React.FormEvent) {
     e.preventDefault();
@@ -47,12 +59,14 @@ export default function IngestPage() {
       return;
     }
     setOcrBusy(true);
+    setOcrPhase('uploading');
     const fd = new FormData();
     fd.append('file', ocrFile);
     const qs = new URLSearchParams({ ingest: '1', engine: ocrEngine });
     if (ocrBatch.trim()) qs.set('batch', ocrBatch.trim());
     try {
       const res = await fetch(`/api/ocr-extract?${qs.toString()}`, { method: 'POST', body: fd });
+      setOcrPhase('processing');
       const data = (await res.json()) as OcrResult & { error?: string };
       if (!res.ok) {
         setOcrError(data.error || data.message || `OCR failed (HTTP ${res.status})`);
@@ -63,6 +77,7 @@ export default function IngestPage() {
       setOcrError((err as Error).message);
     } finally {
       setOcrBusy(false);
+      setOcrPhase('idle');
     }
   }
 
@@ -222,6 +237,30 @@ export default function IngestPage() {
         >
           {ocrBusy ? `Extracting via ${ocrEngine}…` : `Run OCR + Ingest (${ocrEngine})`}
         </button>
+
+        {ocrBusy && (
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50/60 p-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-indigo-600" />
+                <span className="font-semibold text-indigo-900">
+                  {ocrPhase === 'uploading' ? 'Uploading file…' : `${ocrEngine === 'paddle' ? 'PaddleOCR' : 'Azure DI'} processing…`}
+                </span>
+              </div>
+              <span className="font-mono text-xs text-indigo-700">
+                {ocrElapsed}s elapsed
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-indigo-100">
+              <div className="h-full w-1/3 animate-[ocrSlide_1.6s_ease-in-out_infinite] bg-indigo-600" />
+            </div>
+            <p className="mt-2 text-xs text-indigo-800/80">
+              {ocrEngine === 'paddle'
+                ? 'First request can take 60–120 s while the Paddle models warm up. Subsequent runs are faster (~5–15 s/page).'
+                : 'Azure DI typically returns in 10–60 s depending on PDF size.'}
+            </p>
+          </div>
+        )}
       </form>
 
       {ocrError && (

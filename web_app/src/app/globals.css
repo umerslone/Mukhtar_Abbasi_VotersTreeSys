@@ -522,3 +522,10 @@ body {
   .fam-couple { flex-direction: column; gap: .25rem; }
   .fam-couple-link { transform: rotate(90deg); }
 }
+
+@keyframes ocrSlide {
+  0%   { transform: translateX(-120%); }
+  50%  { transform: translateX(120%); }
+  100% { transform: translateX(-120%); }
+}
+
