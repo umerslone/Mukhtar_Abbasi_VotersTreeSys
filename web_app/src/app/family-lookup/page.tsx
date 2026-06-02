@@ -39,6 +39,75 @@ function isMale(v: VoterRow): boolean {
   return g.startsWith('m') || g.includes('male') || g.includes('مرد');
 }
 
+/** Gender-aware Urdu kinship-prefix label for a voter's father/husband name. */
+function kinshipPrefix(v: VoterRow): string {
+  // Males never have a husband; show only "father".
+  return isMale(v) ? 'والد' : 'والد/شوہر';
+}
+
+/**
+ * Dynamically discover ego's household by fuzzy-matching names within the
+ * same polling-block, instead of relying on the stored `inferred_family_id`
+ * (which the ETL only groups by exact (block_code, address) tuple — fragile
+ * because OCR introduces small address-spelling variants).
+ */
+async function discoverFamily(ego: VoterRow): Promise<VoterRow[]> {
+  const pool = (await prisma.voter.findMany({
+    where: ego.block_code ? { block_code: ego.block_code } : {},
+    orderBy: [{ block_code: 'asc' }, { serial_no: 'asc' }],
+    take: 2000,
+  })) as VoterRow[];
+
+  const egoName = normalizeName(ego.name);
+  const egoFather = normalizeName(ego.father_husband_name);
+  const parents = pool.filter(
+    (m) => m.id !== ego.id && egoFather && nameSimilarity(normalizeName(m.name), egoFather) >= PARENT_SIM,
+  );
+  const siblings = pool.filter(
+    (m) =>
+      m.id !== ego.id &&
+      egoFather &&
+      nameSimilarity(normalizeName(m.father_husband_name), egoFather) >= PARENT_SIM,
+  );
+  const children = pool.filter(
+    (m) =>
+      m.id !== ego.id &&
+      egoName &&
+      nameSimilarity(normalizeName(m.father_husband_name), egoName) >= PARENT_SIM,
+  );
+  const childKeys = children.map((c) => normalizeName(c.name)).filter(Boolean);
+  const childIds = new Set(children.map((c) => c.id));
+  const grandchildren = pool.filter(
+    (m) =>
+      m.id !== ego.id &&
+      !childIds.has(m.id) &&
+      childKeys.some((ck) => nameSimilarity(normalizeName(m.father_husband_name), ck) >= PARENT_SIM),
+  );
+  const parentFatherKeys = parents.map((p) => normalizeName(p.father_husband_name)).filter(Boolean);
+  const parentIds = new Set(parents.map((p) => p.id));
+  const unclesAunts = pool.filter(
+    (m) =>
+      m.id !== ego.id &&
+      !parentIds.has(m.id) &&
+      parentFatherKeys.some(
+        (pf) => nameSimilarity(normalizeName(m.father_husband_name), pf) >= PARENT_SIM,
+      ),
+  );
+  // Spouses: opposite-gender voters in same block whose father_husband_name
+  // fuzzy-matches ego's name (or vice-versa) — already covered by parents/children
+  // logic since husband ≈ "father of children".
+
+  const seen = new Set<string>([ego.id]);
+  const out: VoterRow[] = [ego];
+  for (const v of [...parents, ...unclesAunts, ...siblings, ...children, ...grandchildren]) {
+    if (!seen.has(v.id)) {
+      seen.add(v.id);
+      out.push(v);
+    }
+  }
+  return out;
+}
+
 function statusPalette(status: string) {
   switch (status) {
     case 'Supporter':
@@ -163,7 +232,7 @@ function VoterRowCard({ voter, badge }: { voter: VoterRow; badge?: string }) {
         </div>
         {voter.father_husband_name ? (
           <div className="urdu rtl mt-0.5 text-xs text-slate-600" dir="rtl">
-            والد/شوہر: {voter.father_husband_name}
+            {kinshipPrefix(voter)}: {voter.father_husband_name}
           </div>
         ) : null}
         <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500" dir="ltr">
@@ -260,15 +329,14 @@ export default async function FamilyLookupPage({
     ego = matches[0];
   }
 
-  // Load the full inferred family for ego.
+  // Discover the household dynamically via fuzzy name matching within the
+  // same polling-block. The stored `inferred_family_id` is unreliable because
+  // ETL only groups exact (block_code, address) tuples — OCR introduces tiny
+  // address-spelling variants that fragment real families into singletons.
   let familyMembers: VoterRow[] = [];
   let overrides: Record<string, 'confirmed' | 'rejected'> = {};
   if (ego) {
-    familyMembers = (await prisma.voter.findMany({
-      where: { inferred_family_id: ego.inferred_family_id },
-      orderBy: [{ block_code: 'asc' }, { serial_no: 'asc' }],
-      take: 200,
-    })) as VoterRow[];
+    familyMembers = await discoverFamily(ego);
 
     const ovs = await prisma.familyOverride.findMany({
       where: { ego_voter_id: ego.id },
@@ -401,7 +469,7 @@ export default async function FamilyLookupPage({
                     </div>
                     {m.father_husband_name ? (
                       <div className="urdu rtl text-xs text-slate-500" dir="rtl">
-                        والد/شوہر: {m.father_husband_name}
+                        {kinshipPrefix(m)}: {m.father_husband_name}
                       </div>
                     ) : null}
                     <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500" dir="ltr">
@@ -488,7 +556,7 @@ function EgoCard({ ego, memberCount }: { ego: VoterRow; memberCount: number }) {
           </h2>
           {ego.father_husband_name ? (
             <p className="urdu rtl mt-1 text-base text-slate-700" dir="rtl">
-              والد/شوہر: <b>{ego.father_husband_name}</b>
+              {kinshipPrefix(ego)}: <b>{ego.father_husband_name}</b>
             </p>
           ) : null}
           <p className="mt-2 text-sm text-slate-600" dir="ltr">
