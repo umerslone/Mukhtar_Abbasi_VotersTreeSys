@@ -29,8 +29,9 @@ export const dynamic = 'force-dynamic';
 // Azure DI is async; allow up to 5 minutes for big PDFs (Pro / Fluid plans).
 export const maxDuration = 300;
 
-// Vercel body cap: ~4.5 MB Hobby, 50 MB Pro Fluid. We honor 50 MB here.
-const MAX_BYTES = 50 * 1024 * 1024;
+// Hard cap on the uploaded file. Must stay <= experimental.proxyClientMaxBodySize
+// in next.config.mjs (currently 200 MB). Bump both together if you need more.
+const MAX_BYTES = 200 * 1024 * 1024;
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);

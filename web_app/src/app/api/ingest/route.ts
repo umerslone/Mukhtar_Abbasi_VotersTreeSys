@@ -6,7 +6,7 @@ import { ingestVoters, parseCsv, type IngestVoterRow } from '@/lib/ingest';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const MAX_BYTES = 50 * 1024 * 1024; // 50 MB
+const MAX_BYTES = 200 * 1024 * 1024; // 200 MB — must stay <= proxyClientMaxBodySize in next.config.mjs
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
