@@ -342,6 +342,9 @@ export default async function FamilyLookupPage({
           <Link href="/ingest" className="nav-pill nav-pill--ghost">Ingest</Link>
           <Link href="/duty-staff" className="nav-pill nav-pill--ghost">Duty Staff</Link>
           <Link href="/exports" className="nav-pill nav-pill--ghost">Exports</Link>
+          {session.user?.role === 'ADMIN' && (
+            <Link href="/admin/users" className="nav-pill nav-pill--ghost">Admin</Link>
+          )}
         </nav>
       </header>
 

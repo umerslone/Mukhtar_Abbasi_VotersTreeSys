@@ -3,11 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import * as XLSX from 'xlsx';
 import { prisma } from '@/lib/prisma';
+import { requireRole } from '@/lib/permissions';
 import type { VoterStatus } from '@/lib/types';
 
 const ALLOWED_STATUSES: VoterStatus[] = ['Supporter', 'Non-Supporter', 'Undecided', 'Unsurveyed'];
 
 export async function updateVoterStatus(id: string, status: VoterStatus): Promise<void> {
+  await requireRole('EDITOR');
   if (!ALLOWED_STATUSES.includes(status)) {
     throw new Error('Invalid voter status.');
   }
@@ -27,6 +29,7 @@ export async function setFamilyOverride(
   decision: FamilyDecision,
   relationHint?: string,
 ): Promise<void> {
+  await requireRole('EDITOR');
   if (!ALLOWED_DECISIONS.includes(decision)) {
     throw new Error('Invalid family override decision.');
   }
@@ -42,6 +45,7 @@ export async function setFamilyOverride(
 }
 
 export async function clearFamilyOverride(egoVoterId: string, memberVoterId: string): Promise<void> {
+  await requireRole('EDITOR');
   await prisma.familyOverride.deleteMany({
     where: { ego_voter_id: egoVoterId, member_voter_id: memberVoterId },
   });
@@ -62,6 +66,7 @@ export async function updateVoterNames(
   },
   cascadeFatherToFamily = false,
 ): Promise<NameCorrectionResult> {
+  await requireRole('EDITOR');
   const cleaned: { name?: string; father_husband_name?: string } = {};
   if (typeof patch.name === 'string') {
     const v = patch.name.trim();
@@ -114,6 +119,7 @@ interface DutyMatchResult {
 }
 
 export async function matchDutyStaff(formData: FormData): Promise<DutyMatchResult> {
+  await requireRole('EDITOR');
   const file = formData.get('file');
   if (!(file instanceof File)) {
     throw new Error('No file uploaded.');

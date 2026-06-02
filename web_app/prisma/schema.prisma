@@ -52,3 +52,23 @@ model FamilyOverride {
   @@unique([ego_voter_id, member_voter_id])
   @@index([ego_voter_id])
 }
+
+/// Application user. Single source of truth for who can sign in and what they can do.
+/// First user is bootstrapped from STAFF_USERNAME / STAFF_PASSWORD_HASH on first login
+/// (when the table is empty), so existing deployments keep working.
+enum UserRole {
+  ADMIN   // full access incl. user management
+  EDITOR  // can mutate voters / overrides / corrections
+  VIEWER  // read-only
+}
+
+model User {
+  id            String   @id @default(cuid())
+  username      String   @unique
+  password_hash String
+  role          UserRole @default(VIEWER)
+  active        Boolean  @default(true)
+  last_login_at DateTime?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+}
