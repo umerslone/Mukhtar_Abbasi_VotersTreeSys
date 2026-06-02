@@ -1,6 +1,19 @@
 import { prisma } from './prisma';
+import { formatCnic, normalizeCnicKey } from './cnic';
 
-const CNIC_RE = /^\d{5}-\d{7}-\d$/;
+const NAME_HAS_LETTER_RE = /[A-Za-z\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+
+const STR_LIMITS = {
+  block_code: 32,
+  serial_no: 32,
+  name: 255,
+  father_husband_name: 255,
+  cnic: 15,
+  profession: 100,
+  address: 500,
+  inferred_family_id: 255,
+  voter_status: 64,
+} as const;
 
 export interface IngestVoterRow {
   block_code?: string | null;
@@ -23,6 +36,10 @@ export interface IngestResult {
   duplicates: number;
   invalid: number;
   batch: string;
+  afterBatchDedupe?: number;
+  droppedNoCnic?: number;
+  droppedBadName?: number;
+  truncatedFields?: number;
 }
 
 function toStr(v: unknown): string {
@@ -32,8 +49,8 @@ function toStr(v: unknown): string {
 
 function toAge(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null;
-  const n = typeof v === 'number' ? v : parseInt(String(v), 10);
-  return Number.isFinite(n) ? n : null;
+  const n = typeof v === 'number' ? v : parseInt(String(v).replace(/\D/g, ''), 10);
+  return Number.isFinite(n) && n >= 1 && n <= 120 ? n : null;
 }
 
 function toBool(v: unknown): boolean {
@@ -43,11 +60,18 @@ function toBool(v: unknown): boolean {
   return false;
 }
 
+function truncateField<K extends keyof typeof STR_LIMITS>(field: K, value: string): { value: string; truncated: boolean } {
+  const limit = STR_LIMITS[field];
+  if (value.length <= limit) return { value, truncated: false };
+  return { value: value.slice(0, limit), truncated: true };
+}
+
 /**
  * Dedupe-safe upsert.
  *
- * Rule: a voter is uniquely identified by their CNIC. If a row with the same
- * CNIC already exists, the existing record is NEVER overwritten — instead the
+ * Rule: a voter is uniquely identified by their normalized 13-digit CNIC key.
+ * If a row with the same CNIC already exists, the existing record is NEVER
+ * overwritten — instead the
  * import batch tag is appended to its `tags` array so we can audit which
  * imports a voter has appeared in. Only brand-new voters are inserted.
  *
@@ -61,25 +85,11 @@ export async function ingestVoters(rows: IngestVoterRow[], batch: string): Promi
     duplicates: 0,
     invalid: 0,
     batch,
+    afterBatchDedupe: 0,
+    droppedNoCnic: 0,
+    droppedBadName: 0,
+    truncatedFields: 0,
   };
-
-  // Pre-fetch existing CNICs to minimize round trips.
-  const incomingCnics = Array.from(
-    new Set(
-      rows
-        .map((r) => toStr(r.cnic))
-        .filter((c) => CNIC_RE.test(c))
-    )
-  );
-
-  const existing = incomingCnics.length
-    ? await prisma.voter.findMany({
-        where: { cnic: { in: incomingCnics } },
-        select: { id: true, cnic: true, tags: true },
-      })
-    : [];
-
-  const existingByCnic = new Map(existing.map((e) => [e.cnic, e]));
 
   const toCreate: Array<{
     block_code: string;
@@ -87,6 +97,7 @@ export async function ingestVoters(rows: IngestVoterRow[], batch: string): Promi
     name: string;
     father_husband_name: string;
     cnic: string;
+    cnic_key: string;
     profession: string;
     age: number | null;
     address: string;
@@ -102,32 +113,54 @@ export async function ingestVoters(rows: IngestVoterRow[], batch: string): Promi
   // Track CNICs seen in this batch to dedupe within the file itself.
   const seenInBatch = new Set<string>();
 
-  for (const raw of rows) {
-    const cnic = toStr(raw.cnic);
-    const name = toStr(raw.name);
-    const block_code = toStr(raw.block_code) || 'UNKNOWN';
-    const serial_no = toStr(raw.serial_no);
+  const incomingKeys = Array.from(
+    new Set(rows.map((r) => normalizeCnicKey(r.cnic)).filter((key): key is string => Boolean(key))),
+  );
 
-    // Minimum data required: must have a name AND (a valid CNIC OR a serial+block).
-    const hasValidCnic = CNIC_RE.test(cnic);
-    if (!name || (!hasValidCnic && !serial_no)) {
+  const displayCnics = incomingKeys.flatMap((key) => [key, formatCnic(key)]);
+  const existing = incomingKeys.length
+    ? await prisma.voter.findMany({
+        where: {
+          OR: [
+            { cnic_key: { in: incomingKeys } },
+            { cnic: { in: displayCnics } },
+          ],
+        },
+        select: { id: true, cnic: true, cnic_key: true, tags: true },
+      })
+    : [];
+  const existingByKey = new Map(
+    existing
+      .map((e) => [e.cnic_key ?? normalizeCnicKey(e.cnic), e] as const)
+      .filter((entry): entry is readonly [string, typeof existing[number]] => Boolean(entry[0])),
+  );
+
+  for (const raw of rows) {
+    const key = normalizeCnicKey(raw.cnic);
+    if (!key) {
       result.invalid++;
+      result.droppedNoCnic = (result.droppedNoCnic ?? 0) + 1;
       continue;
     }
 
-    // Dedupe key: CNIC if valid, else block+serial+name (fallback for OCR misses).
-    const dedupeKey = hasValidCnic ? cnic : `${block_code}|${serial_no}|${name}`;
+    const nameRaw = toStr(raw.name);
+    if (!nameRaw || !NAME_HAS_LETTER_RE.test(nameRaw)) {
+      result.invalid++;
+      result.droppedBadName = (result.droppedBadName ?? 0) + 1;
+      continue;
+    }
 
     // Already saw this voter earlier in the same upload — count as duplicate.
-    if (seenInBatch.has(dedupeKey)) {
+    if (seenInBatch.has(key)) {
       result.duplicates++;
       continue;
     }
-    seenInBatch.add(dedupeKey);
+    seenInBatch.add(key);
+    result.afterBatchDedupe = (result.afterBatchDedupe ?? 0) + 1;
 
     // Already in DB — append batch tag, do NOT touch other fields.
-    if (hasValidCnic && existingByCnic.has(cnic)) {
-      const existingRow = existingByCnic.get(cnic)!;
+    if (existingByKey.has(key)) {
+      const existingRow = existingByKey.get(key)!;
       if (!existingRow.tags.includes(batch)) {
         tagUpdates.push({ id: existingRow.id, tags: [...existingRow.tags, batch] });
       }
@@ -135,17 +168,39 @@ export async function ingestVoters(rows: IngestVoterRow[], batch: string): Promi
       continue;
     }
 
-    toCreate.push({
-      block_code,
-      serial_no: serial_no || '0',
-      name,
+    const fields = {
+      block_code: toStr(raw.block_code) || 'UNKNOWN',
+      serial_no: toStr(raw.serial_no) || '0',
+      name: nameRaw,
       father_husband_name: toStr(raw.father_husband_name),
-      cnic: hasValidCnic ? cnic : '',
+      cnic: formatCnic(key),
       profession: toStr(raw.profession),
-      age: toAge(raw.age),
       address: toStr(raw.address),
-      inferred_family_id: toStr(raw.inferred_family_id) || `${block_code}-${serial_no || name}`,
+      inferred_family_id: toStr(raw.inferred_family_id),
       voter_status: toStr(raw.voter_status) || 'Unsurveyed',
+    };
+    if (!fields.inferred_family_id) fields.inferred_family_id = `${fields.block_code}-${fields.serial_no || fields.name}`;
+
+    const truncated = Object.fromEntries(
+      Object.entries(fields).map(([field, value]) => {
+        const next = truncateField(field as keyof typeof STR_LIMITS, value);
+        if (next.truncated) result.truncatedFields = (result.truncatedFields ?? 0) + 1;
+        return [field, next.value];
+      }),
+    ) as typeof fields;
+
+    toCreate.push({
+      block_code: truncated.block_code,
+      serial_no: truncated.serial_no,
+      name: truncated.name,
+      father_husband_name: truncated.father_husband_name,
+      cnic: truncated.cnic,
+      cnic_key: key,
+      profession: truncated.profession,
+      age: toAge(raw.age),
+      address: truncated.address,
+      inferred_family_id: truncated.inferred_family_id,
+      voter_status: truncated.voter_status,
       is_on_duty: toBool(raw.is_on_duty),
       tags: [batch],
       source_batch: batch,
@@ -153,8 +208,9 @@ export async function ingestVoters(rows: IngestVoterRow[], batch: string): Promi
   }
 
   if (toCreate.length) {
-    const created = await prisma.voter.createMany({ data: toCreate });
+    const created = await prisma.voter.createMany({ data: toCreate, skipDuplicates: true });
     result.inserted = created.count;
+    result.duplicates += toCreate.length - created.count;
   }
 
   // Batch-tag existing rows that re-appeared in this import.

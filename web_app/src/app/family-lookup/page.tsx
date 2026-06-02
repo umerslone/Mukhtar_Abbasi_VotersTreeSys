@@ -17,6 +17,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { FamilyTree } from '@/components/FamilyTree';
 import { FamilyLookupTabs } from '@/components/FamilyLookupTabs';
+import { formatCnic, normalizeCnicKey } from '@/lib/cnic';
 import {
   FamilyOverridesEditor,
   VoterNameEditor,
@@ -232,6 +233,7 @@ export default async function FamilyLookupPage({
 
   const params = await searchParams;
   const query = (params.q ?? '').trim();
+  const queryCnicKey = normalizeCnicKey(query);
   const egoIdParam = params.ego?.trim() || null;
 
   // ── Resolve candidate voters from the search box ────────────────────
@@ -240,6 +242,7 @@ export default async function FamilyLookupPage({
     matches = (await prisma.voter.findMany({
       where: {
         OR: [
+          ...(queryCnicKey ? [{ cnic_key: queryCnicKey }, { cnic: { contains: formatCnic(queryCnicKey), mode: 'insensitive' as const } }] : []),
           { cnic: { contains: query, mode: 'insensitive' } },
           { name: { contains: query, mode: 'insensitive' } },
         ],

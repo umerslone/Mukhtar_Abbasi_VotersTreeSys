@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import type { FamilyGroup, VoterRow } from '@/lib/types';
 import { DashboardFilters } from '@/components/DashboardFilters';
 import { FamilyTree } from '@/components/FamilyTree';
+import { formatCnic, normalizeCnicKey } from '@/lib/cnic';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,6 +48,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   const params = await searchParams;
   const query = (params.q ?? '').trim();
+  const queryCnicKey = normalizeCnicKey(query);
   const status = statusFilter(params.status);
 
   // ── Two-pass load so a CNIC/name search returns the WHOLE inferred family,
@@ -56,6 +58,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const matched = await prisma.voter.findMany({
       where: {
         OR: [
+          ...(queryCnicKey ? [{ cnic_key: queryCnicKey }, { cnic: { contains: formatCnic(queryCnicKey), mode: 'insensitive' as const } }] : []),
           { cnic: { contains: query, mode: 'insensitive' } },
           { name: { contains: query, mode: 'insensitive' } }
         ]

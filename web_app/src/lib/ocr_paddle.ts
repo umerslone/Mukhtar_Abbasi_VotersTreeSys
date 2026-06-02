@@ -57,6 +57,12 @@ const isPdf = (file: { type?: string; name?: string }): boolean => {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+function toBlobBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
 async function postOneChunk(args: {
   url: string;
   bytes: Uint8Array;
@@ -66,7 +72,7 @@ async function postOneChunk(args: {
   label: string;
 }): Promise<ChunkResult> {
   const { url, bytes, filename, contentType, timeoutMs, label } = args;
-  const blob = new Blob([bytes as BlobPart], { type: contentType });
+  const blob = new Blob([toBlobBuffer(bytes)], { type: contentType });
   const fd = new FormData();
   fd.append('file', blob, filename);
 

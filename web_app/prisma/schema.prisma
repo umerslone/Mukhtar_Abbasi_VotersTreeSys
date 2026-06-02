@@ -16,6 +16,7 @@ model Voter {
   name                String
   father_husband_name String
   cnic                String
+  cnic_key            String?  @unique
   profession          String   @default("")
   age                 Int?
   address             String

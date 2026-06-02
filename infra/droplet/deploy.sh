@@ -38,6 +38,8 @@ npx prisma generate
 if [[ "${RUN_DB_PUSH:-0}" = "1" ]]; then
   echo "▶ prisma db push"
   npx prisma db push --skip-generate
+  echo "▶ backfill CNIC keys"
+  npm run cnic:backfill
 fi
 
 echo "▶ next build"

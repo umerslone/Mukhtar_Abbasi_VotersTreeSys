@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import { prisma } from '@/lib/prisma';
 import { requireRole } from '@/lib/permissions';
 import type { VoterStatus } from '@/lib/types';
+import { formatCnic, normalizeCnicKey } from '@/lib/cnic';
 
 const ALLOWED_STATUSES: VoterStatus[] = ['Supporter', 'Non-Supporter', 'Undecided', 'Unsurveyed'];
 
@@ -133,14 +134,19 @@ export async function matchDutyStaff(formData: FormData): Promise<DutyMatchResul
   const matchedIds = new Set<string>();
 
   for (const row of rows) {
-    const cnic = String(row.cnic ?? '').replace(/\D/g, '');
+    const cnic = normalizeCnicKey(row.cnic);
     const name = String(row.name ?? '').trim();
     const fatherHusband = String(row.father_husband_name ?? '').trim();
 
     let voter = null;
     if (cnic) {
       voter = await prisma.voter.findFirst({
-        where: { cnic: { contains: cnic, mode: 'insensitive' } },
+        where: {
+          OR: [
+            { cnic_key: cnic },
+            { cnic: { contains: formatCnic(cnic), mode: 'insensitive' } },
+          ],
+        },
         select: { id: true }
       });
     }
